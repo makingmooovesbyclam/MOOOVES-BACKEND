@@ -20,7 +20,8 @@ exports.registers = (req, res, next) => {
             "any.required":"password is required",
              "string.empty": "password cannot be Empty",
              "string.pattern.base": 'password must be mininum of 8 character and include at least one Uppercase, lowercase and a special character [!!@#$%^&*]'
-        }).required()
+        }).required(),
+        repeatPassword: Joi.string().required()
     })
     const {error} = schema.validate(req.body,{
         aboutEarly:false
