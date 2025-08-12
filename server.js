@@ -38,11 +38,11 @@ const swaggerDefinition = {
     description: 'This is a swagger documentation for our web application MOOVES.',
     license: {
       name: 
-      'Base_URL: https://heavenlist2-zaz3.onrender.com ',
+      'Base_URL: https://mooves.onrender.com ',
     },
     contact: {
       names: 'urigwe somto  ',
-      url: 'https://github.com/urigwesomto201/HEAVENLIST2',
+      url: 'https://github.com/urigwesomto201/mooves',
     },
   },
   "components": {
@@ -62,7 +62,7 @@ security: [
 ],
   servers: [
     {
-      url: 'https://heavenlist2-zaz3.onrender.com',
+      url: 'https://mooves.onrender.com',
       description: 'Production server',
     },
     {
