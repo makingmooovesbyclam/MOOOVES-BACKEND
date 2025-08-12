@@ -27,7 +27,7 @@ exports.createHost = async (req, res) => {
         message: `Email: ${email} is already in use`
       });
     }
-    const usernameExists = await userModel.findOne({fullName : fullName.toLowerCase().trim() });
+    const usernameExists = await Host.findOne({fullName : fullName.toLowerCase().trim() });
             if (usernameExists) {
                 return res.status(400).json({
                     message:` Name: ${fullName} already in use`
