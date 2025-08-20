@@ -12,6 +12,7 @@ const gameRoutes = require('./routes/gameRoutes');
 const bluetoothRoutes = require('./routes/bluetoothRoutes');
 const matchRoutes = require('./routes/matchRoom.routes');
 const swaggerJSDOC = require('swagger-jsdoc');
+const passport = require('passport');
 const swaggerUIEXPRESS = require('swagger-ui-express');
  const hostRoutes = require('./routes/hostRoutes')
 
@@ -28,7 +29,8 @@ app.use(session({
   saveUninitialized: false,
 }));
 
-
+app.use(passport.initialize());
+app.use(passport.session());
 
 const swaggerDefinition = {
   openapi: '3.0.0',
