@@ -14,8 +14,8 @@ passport.use(new GoogleStrategy({
         user = new userModel({
             email: profile.emails[0].value,
             fullName: profile.displayName,
-            isVerified: profile.emails[0].isVerified,
-            password:''
+   password:"",
+  googleId: profile.id
 
         });
         await user.save();

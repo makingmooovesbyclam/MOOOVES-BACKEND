@@ -471,8 +471,9 @@ console.log(passport._strategies)
  *                   example: "Internal server error"
  */
 
-router.get('/auth/google/login', passport.authenticate('google'),async(req,res)=>{
+router.get('/api/v1/auth/google/login', passport.authenticate('google'),async(req,res)=>{
     console.log('Req User: ',req.user)
+    console.log('Google redirecting back to :',req.originalUrl)
     const token = await jwt.sign({userId: req.user._id, isVerified: req.user.isVerified}, process.env.SECRET,{expiresIn:'1day'});
     res.status(200).json({
         message: 'Google Auth Login Successful',
