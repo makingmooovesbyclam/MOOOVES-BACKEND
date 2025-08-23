@@ -490,7 +490,7 @@ router.get('/auth/google/login', passport.authenticate('google'),async(req,res)=
     console.log('Req User: ',req.user)
     const token = await jwt.sign({userId: req.user._id, isVerified: req.user.isVerified}, process.env.SECRET,{expiresIn:'1day'});
     res.status(200).json({
-        message: 'Google Auth Login Successful',
+        message: 'Google Auth User Login Successful',
         data:req.user,
         token
     })
