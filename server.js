@@ -12,9 +12,12 @@ const gameRoutes = require('./routes/gameRoutes');
 const bluetoothRoutes = require('./routes/bluetoothRoutes');
 const matchRoutes = require('./routes/matchRoom.routes');
 const swaggerJSDOC = require('swagger-jsdoc');
+
 const passport = require('passport');
+
 require('./middlewares/passportHost');
-require('./helper/passport.js')
+require('./helper/passport')
+console.log("Passport strategies:", Object.keys(passport._strategies));
 const swaggerUIEXPRESS = require('swagger-ui-express');
  const hostRoutes = require('./routes/hostRoutes')
 
