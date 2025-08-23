@@ -407,7 +407,7 @@ router.delete('/users/:id', deleteUser);
  *                   type: string
  *                   example: "Internal server error"
  */
-router.get('/google-autheticate', passport.authenticate('google',{scope: ['profile','email']}));
+router.get('/google-autheticate', passport.authenticate('google-user',{scope: ['profile','email']}));
 
 
 /**

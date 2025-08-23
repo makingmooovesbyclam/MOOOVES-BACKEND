@@ -392,7 +392,7 @@ router.delete('/host/:id', deleteHost);
  *                   type: string
  *                   example: "Internal server error"
  */
-router.get('/host-google-autheticate', passport.authenticate('google',{scope: ['profile','email']}));
+router.get('/host-google-autheticate', passport.authenticate('google-host',{scope: ['profile','email']}));
 console.log(passport._strategies)
 
 /**
