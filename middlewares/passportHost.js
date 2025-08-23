@@ -1,7 +1,7 @@
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const passport = require('passport');
 const userModel = require('../models/host');
-passport.use(new GoogleStrategy({
+passport.use('google-host',new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: "https://mooves.onrender.com/api/v1/host/auth/google/login"
