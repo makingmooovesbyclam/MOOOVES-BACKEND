@@ -407,7 +407,7 @@ router.delete('/users/:id', deleteUser);
  *                   type: string
  *                   example: "Internal server error"
  */
-router.get('/google-autheticate', passport.authenticate('google-user',{scope: ['profile','email']}));
+router.get('/google-autheticate', passport.authenticate('google',{scope: ['profile','email']}));
 
 
 /**
@@ -486,7 +486,7 @@ router.get('/google-autheticate', passport.authenticate('google-user',{scope: ['
  *                   example: "Internal server error"
  */
 
-router.get('/auth/google/login', passport.authenticate('google'),async(req,res)=>{
+router.get('/api/v1/auth/google/login', passport.authenticate('google'),async(req,res)=>{
     console.log('Req User: ',req.user)
     const token = await jwt.sign({userId: req.user._id, isVerified: req.user.isVerified}, process.env.SECRET,{expiresIn:'1day'});
     res.status(200).json({
