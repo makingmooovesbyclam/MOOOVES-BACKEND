@@ -1,4 +1,3 @@
-
 const express = require('express');
 const passport = require('passport')
 const router = express.Router();
@@ -7,12 +6,12 @@ const jwt = require('jsonwebtoken');
 
 /**
  * @swagger
- * /google-autheticate:
+ * /api/v1/google-autheticate:
  *   get:
- *     summary: Authenticate a user with Google
+ *     summary: Authenticate a Host with Google
  *     description: Redirects the user to Google for authentication using OAuth.
- *     tags:
- *       - Google Authentication 
+*     tags:
+ *       - Host
  *     security: [] # No authentication needed before redirecting to Google
  *     responses:
  *       302:
@@ -28,16 +27,17 @@ const jwt = require('jsonwebtoken');
  *                   type: string
  *                   example: "Internal server error"
  */
-router.get('/google-autheticate', passport.authenticate('google',{scope: ['profile','email']}));
+router.get('/host-google-autheticate', passport.authenticate('google-host',{scope: ['profile','email']}));
+console.log(passport._strategies)
 
 /**
  * @swagger
- * /auth/google/login:
+ * /api/v1/auth/google/login:
  *   get:
  *     summary: Login a user using Google OAuth
  *     description: Authenticates a user via Google and returns a JWT token upon successful login.
- *     tags:
- *       - Google Authentication
+*     tags:
+ *       - Host
  *     security: [] # No Authentication Required
  *     responses:
  *       200:
@@ -106,14 +106,14 @@ router.get('/google-autheticate', passport.authenticate('google',{scope: ['profi
  *                   example: "Internal server error"
  */
 
-router.get('/auth/google/login', passport.authenticate('google',{failureRedirect:'login-failed'}),async(req,res)=>{
+router.get('/host/auth/google/login', passport.authenticate('google-host',{failureRedirect:'login-failed'}),async(req,res)=>{
     console.log('Req User: ',req.user)
+    console.log('Google redirecting back to :',req.originalUrl)
     const token = await jwt.sign({userId: req.user._id, isVerified: req.user.isVerified}, process.env.SECRET,{expiresIn:'1day'});
     res.status(200).json({
-        message: 'Google Auth User Login Successful',
+        message: 'Google Auth Host Login Successful',
         data:req.user,
         token
     })
 });
-
-module.exports = router
+module.exports = router;

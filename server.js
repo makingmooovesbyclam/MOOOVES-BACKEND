@@ -8,6 +8,8 @@ const session = require('express-session');
 const PORT = process.env.PORT || 2030;
 const secret = process.env.Secretexpress
 const userRouter = require('./routes/userRouter');
+const userPassport = require('./routes/userPassport');
+const hostPassport = require('./routes/hostPassport');
 const gameRoutes = require('./routes/gameRoutes');
 const bluetoothRoutes = require('./routes/bluetoothRoutes');
 const matchRoutes = require('./routes/matchRoom.routes');
@@ -100,6 +102,8 @@ app.use('/api/v1/',hostRoutes);
 app.use('/api/v1/',gameRoutes);
 app.use('/api/v1/',bluetoothRoutes);
 app.use('/api/v1/',matchRoutes);
+app.use('',userPassport);
+app.use('',hostPassport);
 app.use((error, req, res, next) => {
   if(error){
      return res.status(400).json({message:  error.message})

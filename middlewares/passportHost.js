@@ -4,7 +4,7 @@ const userModel = require('../models/host');
 passport.use('google-host',new GoogleStrategy({
     clientID: process.env.GOOGLE_Host_ID,
     clientSecret: process.env.GOOGLE_Host_SECRET,
-    callbackURL: "https://mooves.onrender.com/api/v1/host/auth/google/login"
+    callbackURL: "https://mooves.onrender.com/host/auth/google/login"
   },
   async (accessToken, refreshToken, profile, cb) => {
  console.log("Profile: ",profile);
