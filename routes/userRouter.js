@@ -486,7 +486,7 @@ router.get('/google-autheticate', passport.authenticate('google',{scope: ['profi
  *                   example: "Internal server error"
  */
 
-router.get('/api/v1/auth/google/login', passport.authenticate('google'),async(req,res)=>{
+router.get('/api/v1/auth/google/login', passport.authenticate('google',{failureRedirect:'login-failed'}),async(req,res)=>{
     console.log('Req User: ',req.user)
     const token = await jwt.sign({userId: req.user._id, isVerified: req.user.isVerified}, process.env.SECRET,{expiresIn:'1day'});
     res.status(200).json({
