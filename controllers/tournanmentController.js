@@ -18,6 +18,9 @@ exports.createTournament = async (req, res) => {
     if (!organizerId || !name) {
       return res.status(400).json({ error: "Host and name are required" });
     }
+    if(maxPlayers > 50){
+      return res.status(400).json({error:"maximum player is 50"})
+    }
 // 🔍 Step 1: Try to find in User collection
     let users = await User.findById(organizerId);
     let host = null;

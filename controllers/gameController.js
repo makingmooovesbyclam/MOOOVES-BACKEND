@@ -45,9 +45,13 @@ exports.createMatch = async (req, res) => {
   }
 };
 // helper: check for 5-in-a-row
+// ✅ Utility function to check 5 in a row
 function checkFive(board, row, col, symbol) {
   const directions = [
-    [0, 1], [1, 0], [1, 1], [1, -1] // horiz, vert, diag, anti-diag
+    [0, 1],  // horizontal
+    [1, 0],  // vertical
+    [1, 1],  // diagonal down-right
+    [1, -1]  // diagonal up-right
   ];
 
   for (let [dr, dc] of directions) {
@@ -56,97 +60,151 @@ function checkFive(board, row, col, symbol) {
     // forward
     let r = row + dr, c = col + dc;
     while (r >= 0 && r < 30 && c >= 0 && c < 30 && board[r][c] === symbol) {
-      streak++; r += dr; c += dc;
+      streak++;
+      r += dr; c += dc;
     }
 
     // backward
     r = row - dr; c = col - dc;
     while (r >= 0 && r < 30 && c >= 0 && c < 30 && board[r][c] === symbol) {
-      streak++; r -= dr; c -= dc;
+      streak++;
+      r -= dr; c -= dc;
     }
 
-    if (streak >= 5) return true; // ✅ stop immediately when 5 found
+    if (streak >= 5) return true; // ✅ winner found
   }
   return false;
+}
+
+// ✅ Utility function to calculate score (when no 5-in-a-row winner)
+function calculateScore(board, symbol) {
+  const directions = [
+    [0, 1], [1, 0], [1, 1], [1, -1]
+  ];
+
+  let score = 0;
+
+  for (let r = 0; r < 30; r++) {
+    for (let c = 0; c < 30; c++) {
+      if (board[r][c] !== symbol) continue;
+
+      for (let [dr, dc] of directions) {
+        let streak = 1;
+        let nr = r + dr, nc = c + dc;
+
+        while (nr >= 0 && nr < 30 && nc >= 0 && nc < 30 && board[nr][nc] === symbol) {
+          streak++;
+          nr += dr; nc += dc;
+        }
+
+        // give points for streaks < 5
+        if (streak === 2) score += 1;
+        if (streak === 3) score += 3;
+        if (streak === 4) score += 5;
+      }
+    }
+  }
+
+  return score;
 }
 
 exports.makeMove = async (req, res) => {
   try {
     const { playerId, row, col, matchid } = req.body;
 
-    if (!playerId ||  row === undefined || col === undefined || !matchid) {
-      return res.status(400).json({ message: 'Missing required fields',});
+    if (!playerId || row === undefined || col === undefined || !matchid) {
+      return res.status(400).json({ message: 'Missing required fields' });
     }
+
     if (row < 0 || row > 29 || col < 0 || col > 29) {
-      return res.status(400).json({ message: 'Invalid board position', });
+      return res.status(400).json({ message: 'Invalid board position' });
     }
 
     const match = await Match.findById(matchid);
-    if (!match) return res.status(404).json({ message: 'Match not found', });
-    if (match.status === 'completed') return res.status(400).json({ message: 'Match already ended', winner: match.winner || null });
+    if (!match) return res.status(404).json({ message: 'Match not found' });
+    if (match.status === 'completed') {
+      return res.status(400).json({ 
+        message: 'Match already ended', 
+        winner: match.winner || null 
+      });
+    }
 
     const board = match.gameState.board;
-    if (board[row][col]) return res.status(400).json({ message: 'Cell already taken',  });
+    if (board[row][col]) {
+      return res.status(400).json({ message: 'Cell already taken' });
+    }
 
     // ✅ Ensure correct turn
     if (String(match.gameState.currentTurn) !== String(playerId)) {
       return res.status(403).json({ message: 'Not your turn', winner: null });
     }
 
-    // ✅ Decide symbol based on player
+    // ✅ Decide symbol (X for player1, O for player2)
     let symbol;
     if (String(match.player1) === String(playerId)) {
-      symbol = "P1";
+      symbol = "X";
     } else if (String(match.player2) === String(playerId)) {
-      symbol = "P2";
+      symbol = "O";
     } else {
       return res.status(403).json({ message: 'You are not part of this match' });
     }
 
     // ✅ Make move
     board[row][col] = symbol;
-    match.gameState.moves.push({ playerId, move: { row, col } });
+    match.gameState.moves.push({ playerId, symbol, move: { row, col } });
     match.gameState.movesMade++;
 
-    // ✅ Check for winner
+    let winner = null;
+
+    // ✅ Check 5-in-a-row winner
     if (checkFive(board, row, col, symbol)) {
       match.status = 'completed';
       match.winner = playerId;
-      await match.save();
-      return res.status(200).json({ 
-        message:` Winner decided`, 
-        match,
-        winner: playerId 
-      });
-    }
+      winner = playerId;
+    } 
+    else {
+      // ✅ Check board full or time expired
+      const boardFull = match.gameState.movesMade >= 30 * 30;
+      const timeExpired = new Date() >= match.endsAt;
 
-    // ✅ Switch turn
-    if (String(match.player1) === String(playerId)) {
-      match.gameState.currentTurn = match.player2;
-    } else {
-      match.gameState.currentTurn = match.player1;
-    }
+      if (boardFull || timeExpired) {
+        const scoreX = calculateScore(board, "X");
+        const scoreO = calculateScore(board, "O");
 
-    // ✅ Handle match timeout (endsAt)
-    if (new Date() >= match.endsAt) {
-      match.status = 'completed';
-      match.winner = null; // draw if time runs out
-      await match.save();
-      return res.status(200).json({ 
-        message: "Match ended - Time expired", 
-        match,
-        winner: null 
-      });
+        if (scoreX > scoreO) {
+          winner = match.player1;
+        } else if (scoreO > scoreX) {
+          winner = match.player2;
+        } else {
+          winner = null; // draw
+        }
+
+        match.status = 'completed';
+        match.winner = winner;
+      } else {
+        // ✅ Switch turn if no winner yet
+        if (String(match.player1) === String(playerId)) {
+          match.gameState.currentTurn = match.player2;
+        } else {
+          match.gameState.currentTurn = match.player1;
+        }
+      }
     }
 
     await match.save();
-    return res.status(200).json({ message: 'Move made', match, winner: null });
+
+    return res.status(200).json({
+      message: winner? (checkFive(board, row, col, symbol) ? "Winner decided by 5 in a row" : "Winner decided by score")
+        : (match.status === 'completed' ? "Match ended in a draw" : "Move made"),
+      match,
+      winner
+    });
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal error ' + err.message,  });
+    res.status(500).json({ message: 'Internal error ' + err.message });
   }
 };
-
 
 exports.submitOfflineResult = async (req, res) => {
   try {

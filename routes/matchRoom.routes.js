@@ -27,7 +27,7 @@ const controller = require('../controllers/matchRoom.controller');
  *                 example: "64f9c2e3a12bcd45ef567890"
  *               gameType:
  *                 type: string
- *                 example: "chess"
+ *                 example: "TicTacToe"
  *     responses:
  *       201:
  *         description: Match room created successfully

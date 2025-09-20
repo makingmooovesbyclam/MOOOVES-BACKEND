@@ -130,16 +130,18 @@ router.post('/:matchId/submit-resultoffline', matchController.submitOfflineResul
  * @swagger
  * /api/v1/move:
  *   post:
- *     summary: Make a move in a live match
- *     description: >
- *       Allows a player to make a move during a game (e.g., TicTacToe, Chess, etc.).  
- *       Logic:  
- *       - Validates that it's the player's turn.  
- *       - Updates the board state in the Match model.  
- *       - Checks for a win, loss, or draw after the move.  
- *       - If game ends, winner is assigned, and tournament progression continues.  
- *
- *       Why important? This enables the actual gameplay, ensuring fairness and win/draw detection.
+ *     summary: Make a move in an active match
+ *     description: |
+ *       This endpoint allows a player to make a move in a Tic-Tac-Toe style tournament game.  
+ *       - Each player is assigned a symbol: X (player1) or O (player2).  
+ *       - A player must play only when it's their turn.  
+ *       - The system checks for a winner after each move.  
+ *       
+ *       Winning logic:
+ *       1. Immediate Win: If a player forms 5 in a row (horizontal, vertical, diagonal, or anti-diagonal), they win immediately.  
+ *       2. Highest Score Win: If no 5 in a row and the game ends (board full or time expired), the winner is decided by highest score.  
+ *          - Scoring: 2 in a row = 1 point, 3 in a row = 3 points, 4 in a row = 5 points.  
+ *       3. Draw: If both players have equal scores when the game ends, the match is a draw.  
  *     tags: [Games]
   *     security: [] # No authentication required
  *     requestBody:
@@ -148,43 +150,62 @@ router.post('/:matchId/submit-resultoffline', matchController.submitOfflineResul
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - playerId
+ *               - row
+ *               - col
+ *               - matchid
  *             properties:
- *               matchId:
- *                 type: string
  *               playerId:
  *                 type: string
- *               move:
- *                 type: object
- *                 description: Move payload depending on game type
- *             example:
- *               matchId: "64f9c23d8f9b1234abcd5678"
- *               playerId: "64f9c23d8f9b1234abcd5678"
- *               move:
- *                 x: 1
- *                 y: 2
+ *                 example: "64fc98e9a8120c2b4d3f1234"
+ *               row:
+ *                 type: integer
+ *                 example: 5
+ *               col:
+ *                 type: integer
+ *                 example: 8
+ *               matchid:
+ *                 type: string
+ *                 example: "650b7d9a87f91345c1234567"
  *     responses:
  *       200:
- *         description: Move accepted
+ *         description: Move successfully made (or game ended)
  *         content:
  *           application/json:
- *             example:
- *               board: [["X","",""],["","O",""],["","",""]]
- *               nextTurn: "64f9c23d8f9b1234abcd5679"
- *               status: "in-progress"
+ *             examples:
+ *               MoveMade:
+ *                 summary: Move made (no winner yet)
+ *                 value:
+ *                   message: "Move made"
+ *                   winner: null
+ *                   match: { ... }
+ *               WinnerByFive:
+ *                 summary: Player won by 5 in a row
+ *                 value:
+ *                   message: "Winner decided by 5 in a row"
+ *                   winner: "64fc98e9a8120c2b4d3f1234"
+ *                   match: { ... }
+ *               WinnerByScore:
+ *                 summary: Player won by highest score
+ *                 value:
+ *                   message: "Winner decided by score"
+ *                   winner: "650b7d9a87f91345c1234567"
+ *                   match: { ... }
+ *               Draw:
+ *                 summary: Match ended in a draw
+ *                 value:
+ *                   message: "Match ended in a draw"
+ *                   winner: null
+ *                   match: { ... }
  *       400:
- *         description: Invalid move (e.g., cell occupied or not player's turn)
- *         content:
- *           application/json:
- *             example:
- *               error: "Invalid move"
+ *         description: Invalid request (missing fields, cell already taken, or match already completed)
+ *       403:
+ *         description: Invalid move (not the player's turn or player not in the match)
  *       404:
  *         description: Match not found
-   *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             example:
- *               error: "Failed "
+ *       500:
+ *         description: Internal server error
  */
 router.post('/move', makeMove);
 
@@ -208,9 +229,12 @@ router.post('/move', makeMove);
  *             properties:
  *               player1:
  *                 type: string
+ *               matchroomId:
+ *                 type: string
  *               player2:
  *                 type: string
  *             example:
+  *               matchroomId: "650a01c28f9b5678abcd1234"
  *               player1: "64f9c23d8f9b1234abcd5678"
  *               player2: "64f9c23d8f9b1234abcd5679"
  *     responses:
@@ -219,7 +243,7 @@ router.post('/move', makeMove);
  *         content:
  *           application/json:
  *             example:
- *               matchId: "650a01c28f9b5678abcd1234"
+ *               matchroomId: "650a01c28f9b5678abcd1234"
  *               player1: "64f9c23d8f9b1234abcd5678"
  *               player2: "64f9c23d8f9b1234abcd5679"
  *               status: "in-progress"

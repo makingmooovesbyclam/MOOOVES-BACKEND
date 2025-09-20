@@ -25,7 +25,10 @@ const authMiddleware  = require('../middlewares/authMiddleware')
  *               name:
  *                 type: string
  *                 example: "Summer Championship"
- *               createdBy:
+ *               maxPlayers:
+ *                 type: string
+ *                 example: "25"
+ *               organizerId:
  *                 type: string
  *                 description: ID of the user or host creating the tournament
  *                 example: "64f2b8d91a32f9c8b1c12345"
@@ -76,7 +79,7 @@ router.post('/tournaments',authMiddleware, tournamentController.createTournament
  *           schema:
  *             type: object
  *             properties:
- *               playerId:
+ *               userId:
  *                 type: string
  *                 example: "64f2c1a01a32f9c8b1c99999"
  *     responses:
