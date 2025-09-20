@@ -1,4 +1,4 @@
-const { register, verifyUser, login,getUsers,getoneUser,updateUser,deleteUser } = require('../controllers/usercontroller');
+const { register, verifyUser, login,logoutUser,getUsers,getoneUser,updateUser,deleteUser,grantHostAccess,requestHostAccess } = require('../controllers/usercontroller');
 const {registers} = require('../middlewares/validator')
 const jwt = require('jsonwebtoken');
 const passport = require('passport')
@@ -114,6 +114,9 @@ const router = require('express').Router();
  */
 router.post('/users', registers, register);
 
+router.post('/req', requestHostAccess);
+router.post('/grant', grantHostAccess);
+
 // router.get('/verify-user/:token', verifyUser);
 
 /**
@@ -182,6 +185,58 @@ router.post('/users', registers, register);
  *               message: "Internal Server Error"
  */
 router.post('/login', login);
+/**
+ * @swagger
+ * /api/v1/logout-user:
+ *   post:
+ *     summary: Logout a user
+ *     description: >
+ *       Marks a user as logged out.  
+ *       The user must provide their ID in the request body.  
+ *       Once logged out, the isLoggedIn flag is set to false in the database.  
+ *     tags:
+ *       - Users
+  *     security: [] # No authentication required
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id]
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 description: The ID of the user logging out
+ *                 example: "64fc1e29a9b01234dcba5678"
+ *     responses:
+ *       200:
+ *         description: User logged out successfully
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Logout successful"
+ *       401:
+ *         description: Unauthorized - missing or invalid user ID
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Unauthorized. tenant not authenticated"
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "User not found"
+ *       500:
+ *         description: Server error during logout
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Error logging out tenant"
+ *               error: "Detailed error message"
+ */
+router.post('/logout-user', logoutUser);
 
 
 /**
@@ -384,6 +439,109 @@ router.put('/users/:id', updateUser);
  */
 router.delete('/users/:id', deleteUser);
 
+// ✅ User requests host access
+/**
+ * @swagger
+ * /api/v1/request-host-access:
+ *   post:
+ *     summary: Request host access (user)
+ *     description: >
+ *       Allows a user to request host access.  
+ *       Requirement: user must have joined at least 2 tournaments.  
+ *       The request will be flagged for manual admin approval.  
+ *     tags:
+ *       - Users
+  *     security: [] # No authentication required
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId]
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: The ID of the requesting user
+ *                 example: "64fd1e29a9b01234dcba5678"
+ *     responses:
+ *       200:
+ *         description: Request submitted successfully
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Request submitted, awaiting admin approval"
+ *       400:
+ *         description: User has not met tournament requirement
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: "You must play in at least 2 tournaments before requesting host access"
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: "User not found"
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: "Failed to request host access"
+ *               details: "Error details here"
+ */
+router.post('/request-host-access', requestHostAccess);
 
+// ✅ Admin grants host access
+/**
+ * @swagger
+ * /auth/grant-host-access:
+ *   post:
+ *     summary: Grant host access (admin)
+ *     description: >
+ *       Allows an admin to grant host access to a user.  
+ *       This sets the canHostTournament flag to true in the user's record.  
+ *     tags:
+ *       - Users
+  *     security: [] # No authentication required
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId]
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: The ID of the user receiving host access
+ *                 example: "64fd1e29a9b01234dcba5678"
+ *     responses:
+ *       200:
+ *         description: Host access granted successfully
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Host access granted"
+ *               user:
+ *                 _id: "64fd1e29a9b01234dcba5678"
+ *                 username: "player123"
+ *                 canHostTournament: true
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: "User not found"
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: "Failed to grant host access"
+ *               details: "Error details here"
+ */
+router.post('/grant-host-access', grantHostAccess);
 
 module.exports = router

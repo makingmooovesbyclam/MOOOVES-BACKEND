@@ -11,12 +11,24 @@ const userSchema =  new mongoose.Schema({
         lowercase: true,
         required:true
     },
+     isLoggedIn: {
+      type: Boolean, // Changed from STRING to BOOLEAN
+      defaultValue: false 
+    },
     password:{
         type: String,
         required: false,
     },
-   
+    // For payouts
+  bankAccount: {
+    accountName: String,
+    accountNumber: String,
+    bankCode: String,       // e.g. "058" for GTBank
+    recipientCode: String   // Returned by Paystack when you create a transfer recipient
+  },
+   tournamentsJoinedCount: {type:Number,default:0},
 
+canHostTournament: {type:Boolean,default:false}
 
 }, {timestamps: true});
 

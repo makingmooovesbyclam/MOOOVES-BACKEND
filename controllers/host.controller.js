@@ -89,7 +89,7 @@ exports.getOneHost = async (req, res) => {
   try {
     const host = await Host.findById(req.params.id);
     if (!host) return res.status(404).json({ error: 'Host not found' });
-    res.json(host);
+    res.status(200).json(host);
   } catch (err) {
     res.status(400).json({ error: 'Invalid host ID' });
   }
@@ -131,7 +131,7 @@ exports.deleteHost = async (req, res) => {
   try {
     const host = await Host.findByIdAndDelete(req.params.id);
     if (!host) return res.status(404).json({ error: 'Host not found' });
-    res.json({ message: 'Host deleted' });
+    res.status(200).json({ message: 'Host deleted' });
   } catch (err) {
     res.status(400).json({ error: 'Invalid host ID' });
   }
@@ -161,8 +161,11 @@ exports.Hostlogin = async(req, res)=>{
             });
         }
         // Generate a token for the user
-        const token = await jwt.sign({userId: user._id, }, 
+        const token = await jwt.sign({userId: user._id,isLoggedIn : true }, 
             process.env.SECRET, {expiresIn: '1d'});
+
+              user.isLoggedIn = true;
+        await user.save();
         //password destructuring
         const {password: hashedPassword, ...data} = user._doc
         // send a success response
@@ -179,3 +182,29 @@ exports.Hostlogin = async(req, res)=>{
     }
 };
 
+
+
+exports.logoutHost = async (req, res) => {
+    try {
+        const { id } = req.body;
+
+        if (!id) {
+            return res.status(401).json({ message: 'Unauthorized. tenant not authenticated' });
+        }
+
+        const tenant = await Host.findById(id);
+
+        if (!tenant) {
+            return res.status(404).json({ message: 'Host not found' });
+        }
+
+        tenant.isLoggedIn = false;
+
+        await tenant.save();
+
+        res.status(200).json({ message: 'Logout successful' });
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).json({ message: 'Error logging out tenant', error: error.message });
+    }
+};

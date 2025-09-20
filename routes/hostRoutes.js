@@ -6,7 +6,8 @@ const {
   getOneHost,
   updateHost,
   deleteHost,
-  Hostlogin
+  Hostlogin,
+  logoutHost
 } = require('../controllers/host.controller');
 const jwt = require('jsonwebtoken');
 const passport = require('passport')
@@ -177,6 +178,59 @@ router.post('/host', registers, createHost);
  *               message: "Internal Server Error"
  */
 router.post('/hostlogin', Hostlogin);
+
+/**
+ * @swagger
+ * /api/v1/hostlogout:
+ *   post:
+ *     summary: Logout a host
+ *     description: >
+ *       Marks a host (tournament organizer) as logged out.  
+ *       The host must provide their ID in the request body.  
+ *       Once logged out, the isLoggedIn flag is set to false in the database.  
+ *     tags:
+ *       - Host 
+  *     security: [] # No authentication required
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id]
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 description: The ID of the host logging out
+ *                 example: "64f9c23d8f9b1234abcd5678"
+ *     responses:
+ *       200:
+ *         description: Host logged out successfully
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Logout successful"
+ *       401:
+ *         description: Unauthorized - missing or invalid host ID
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Unauthorized. tenant not authenticated"
+ *       404:
+ *         description: Host not found
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Host not found"
+ *       500:
+ *         description: Server error during logout
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Error logging out tenant"
+ *               error: "Detailed error message"
+ */
+router.post('/hostlogout', logoutHost);
 
 
 /**

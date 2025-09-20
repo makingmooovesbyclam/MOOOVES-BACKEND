@@ -14,8 +14,19 @@ const hostSchema = new mongoose.Schema({
         type: String,
         required: false,
     },
-   
+     isLoggedIn: {
+      type: Boolean, // Changed from STRING to BOOLEAN
+      defaultValue: false 
+    },
+    // For payouts
+  bankAccount: {
+    accountName: String,
+    accountNumber: String,
+    bankCode: String,       // e.g. "058" for GTBank
+    recipientCode: String   // Returned by Paystack when you create a transfer recipient
+  },
+   approvedByAdmin:{type:Boolean,default:true}
    
 }, { timestamps: true });
-
-module.exports = mongoose.model('host', hostSchema);
+const Host = mongoose.model('host', hostSchema)
+module.exports = Host

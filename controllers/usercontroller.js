@@ -170,8 +170,11 @@ exports.login = async(req, res)=>{
             });
         }
         // Generate a token for the user
-        const token = await jwt.sign({userId: user._id, }, 
+        const token = await jwt.sign({userId: user._id, isLoggedIn : true}, 
             process.env.SECRET, {expiresIn: '1d'});
+
+            user.isLoggedIn = true;
+        await user.save();
         //password destructuring
         const {password: hashedPassword, ...data} = user._doc
         // send a success response
@@ -188,10 +191,36 @@ exports.login = async(req, res)=>{
     }
 };
 
+
+exports.logoutUser = async (req, res) => {
+    try {
+        const { id } = req.body;
+
+        if (!id) {
+            return res.status(401).json({ message: 'Unauthorized. tenant not authenticated' });
+        }
+
+        const tenant = await userModel.findById(id);
+
+        if (!tenant) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        tenant.isLoggedIn = false;
+
+        await tenant.save();
+
+        res.status(200).json({ message: 'Logout successful' });
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).json({ message: 'Error logging out tenant', error: error.message });
+    }
+};
+
 exports.getUsers = async (req, res) => {
   try {
     const users = await userModel.find();
-    res.status(201).json(users);
+    res.status(200).json(users);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch users' });
   }
@@ -201,7 +230,7 @@ exports.getoneUser = async (req, res) => {
   try {
     const user = await userModel.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.status(201).json(user);
+    res.status(200).json(user);
   } catch (err) {
     res.status(400).json({ error: 'Invalid user ID' });
   }
@@ -234,5 +263,40 @@ exports.deleteUser = async (req, res) => {
     res.status(200).json({ message: 'User deleted' });
   } catch (err) {
     res.status(400).json({ error: 'Invalid user ID' });
+  }
+};
+
+
+
+exports.requestHostAccess = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const user = await userModel.findById(userId);
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (user.tournamentsJoinedCount < 2) {
+      return res.status(400).json({ 
+        error: 'You must play in at least 2 tournaments before requesting host access' 
+      });
+    }
+
+    // flag request (admin will approve manually)
+    res.json({ message: 'Request submitted, awaiting admin approval' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to request host access', details: err.message });
+  }
+};
+
+
+//admin
+exports.grantHostAccess = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const user = await userModel.findByIdAndUpdate(userId, { canHostTournament: true }, { new: true });
+    
+    res.json({ message: 'Host access granted', user });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to grant host access', details: err.message });
   }
 };

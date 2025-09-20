@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 
 /**
  * @swagger
- * /api/v1/google-autheticate:
+ * /host-google-autheticate:
  *   get:
  *     summary: Authenticate a Host with Google
  *     description: Redirects the user to Google for authentication using OAuth.
@@ -32,7 +32,7 @@ console.log(passport._strategies)
 
 /**
  * @swagger
- * /api/v1/auth/google/login:
+ * /host/auth/google/login:
  *   get:
  *     summary: Login a user using Google OAuth
  *     description: Authenticates a user via Google and returns a JWT token upon successful login.

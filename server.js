@@ -13,6 +13,7 @@ const hostPassport = require('./routes/hostPassport');
 const gameRoutes = require('./routes/gameRoutes');
 const bluetoothRoutes = require('./routes/bluetoothRoutes');
 const matchRoutes = require('./routes/matchRoom.routes');
+const tournanmentRoutes = require('./routes/tournanment');
 const swaggerJSDOC = require('swagger-jsdoc');
 
 const passport = require('passport');
@@ -102,6 +103,7 @@ app.use('/api/v1/',hostRoutes);
 app.use('/api/v1/',gameRoutes);
 app.use('/api/v1/',bluetoothRoutes);
 app.use('/api/v1/',matchRoutes);
+app.use('/api/v1/',tournanmentRoutes);
 app.use('',userPassport);
 app.use('',hostPassport);
 app.use((error, req, res, next) => {

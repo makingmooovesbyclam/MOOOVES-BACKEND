@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 
 const moveSchema = new mongoose.Schema({
-  playerId: String,
-  move: Object,
+  playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  move: Object, // {row, col}
   timestamp: { type: Date, default: Date.now }
 });
 
@@ -12,31 +12,48 @@ const matchSchema = new mongoose.Schema({
     ref: 'MatchRoom',
     required: true
   },
-  player1: String,
-  player2: String,
+
+  player1: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  player2: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    
+  
   status: {
     type: String,
     enum: ['pending', 'ongoing', 'completed'],
     default: 'pending'
   },
-  winner: String,
-  handshakeToken: String,
 
-  // ✅ New gameState object
+  winner: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // ✅ supports ties
+  handshakeToken: String,
+  tournamentId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Tournament' }], // ✅ supports ties
+  
+
   gameState: {
     board: {
       type: [[String]],
-      default: [['', '', ''], ['', '', ''], ['', '', '']]
+      default: Array(30).fill().map(() => Array(30).fill("")) // ✅ 30x30
     },
     moves: [moveSchema],
-    movesMade: {
-      type: Number,
-      default: 0
-    },
-    currentTurn: {
-      type: String // or mongoose.Schema.Types.ObjectId if you prefer linking to User
-    }
-  }
+    movesMade: { type: Number, default: 0 },
+    currentTurn: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  },
+
+  startedAt: { type: Date, default: Date.now },
+  endsAt: { type: Date },
+
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Match', matchSchema);
+matchSchema.pre('save', function (next) {
+  this.updatedAt = new Date();
+  if (!this.endsAt) {
+    this.endsAt = new Date(this.startedAt.getTime() + 10 * 60 * 1000); // 10 min
+  }
+  next();
+});
+
+
+const Match = mongoose.model('Match', matchSchema)
+
+module.exports = Match;

@@ -1,22 +1,30 @@
-exports.checkWinner = (board) => {
-  const lines = [
-    // Rows
-    [board[0][0], board[0][1], board[0][2]],
-    [board[1][0], board[1][1], board[1][2]],
-    [board[2][0], board[2][1], board[2][2]],
-    // Columns
-    [board[0][0], board[1][0], board[2][0]],
-    [board[0][1], board[1][1], board[2][1]],
-    [board[0][2], board[1][2], board[2][2]],
-    // Diagonals
-    [board[0][0], board[1][1], board[2][2]],
-    [board[0][2], board[1][1], board[2][0]],
+// ✅ 5 in a row check on N×N board
+exports.checkWinner = (board, row, col, symbol) => {
+  const directions = [
+    [0, 1],  // horizontal →
+    [1, 0],  // vertical ↓
+    [1, 1],  // diagonal ↘
+    [1, -1]  // diagonal ↙
   ];
 
-  for (let line of lines) {
-    if (line[0] && line[0] === line[1] && line[1] === line[2]) {
-      return line[0]; // 'X' or 'O'
+  const inBounds = (r, c) => r >= 0 && r < board.length && c >= 0 && c < board.length;
+
+  for (const [dr, dc] of directions) {
+    let count = 1;
+
+    // forward direction
+    let r = row + dr, c = col + dc;
+    while (inBounds(r, c) && board[r][c] === symbol) {
+      count++; r += dr; c += dc;
     }
+
+    // backward direction
+    r = row - dr; c = col - dc;
+    while (inBounds(r, c) && board[r][c] === symbol) {
+      count++; r -= dr; c -= dc;
+    }
+
+    if (count >= 5) return symbol;
   }
 
   const draw = board.flat().every(cell => cell);
