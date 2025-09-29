@@ -13,7 +13,8 @@ const hostPassport = require('./routes/hostPassport');
 const gameRoutes = require('./routes/gameRoutes');
 const bluetoothRoutes = require('./routes/bluetoothRoutes');
 const matchRoutes = require('./routes/matchRoom.routes');
-const tournanmentRoutes = require('./routes/tournanment');
+const transactionRoutes = require('./routes/tournanment');
+const tournanmentRoutes = require('./routes/transaction.routes');
 const swaggerJSDOC = require('swagger-jsdoc');
 
 const passport = require('passport');
@@ -25,7 +26,45 @@ const swaggerUIEXPRESS = require('swagger-ui-express');
  const hostRoutes = require('./routes/hostRoutes')
 
 
+ 
 const app = express();
+
+const http = require('http');
+const { Server } = require('socket.io');
+
+const server = http.createServer(app);
+
+// configure socket.io
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_ORIGIN || '*',
+    methods: ['GET','POST']
+  }
+});
+
+// optional: store io on app so controllers can access via req.app.get('io')
+app.set('io', io);
+
+// basic connection handling
+io.on('connection', socket => {
+  console.log('socket connected', socket.id);
+
+  // join tournament rooms if client asks
+  socket.on('joinTournamentRoom', ({ tournamentId }) => {
+    if (tournamentId) socket.join(String(tournamentId));
+  });
+
+  socket.on('leaveTournamentRoom', ({ tournamentId }) => {
+    if (tournamentId) socket.leave(String(tournamentId));
+  });
+
+  socket.on('disconnect', () => {
+    console.log('socket disconnected', socket.id);
+  });
+});
+
+
+
 app.use(cors({origin: "*"}));
 app.use(morgan('dev'));
 app.use(express.json());
@@ -104,6 +143,7 @@ app.use('/api/v1/',gameRoutes);
 app.use('/api/v1/',bluetoothRoutes);
 app.use('/api/v1/',matchRoutes);
 app.use('/api/v1/',tournanmentRoutes);
+app.use('/api/v1/',transactionRoutes);
 app.use('',userPassport);
 app.use('',hostPassport);
 app.use((error, req, res, next) => {

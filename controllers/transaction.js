@@ -174,7 +174,7 @@ exports.distributePayment = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-const Transaction = require("../models/transaction");
+
 
 
 // ------------------ MANUAL PAYOUT ------------------
@@ -325,8 +325,7 @@ const Host = require('../models/host');
 const User = require('../models/user');
 
 
-// controllers/bankController.js
-const axios = require('axios');
+
 
 
 // ✅ Fetch list of Nigerian banks
