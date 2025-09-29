@@ -1,6 +1,8 @@
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const passport = require('passport');
 const userModel = require('../models/user');
+const sendEmail = require('../helper/nodemailer');
+const signup = require('../helper/signup')
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -19,6 +21,19 @@ passport.use(new GoogleStrategy({
 
         });
         await user.save();
+
+         const firstName = fullName.trim().split(' ')[0];
+                
+                    //  Setup email details
+                    const mailDetails = {
+                      email: host.email,
+                      subject: 'Welcome to the MOOOVES Platform!',
+                      html: signup( firstName)
+                    };
+                
+                    // Send email
+                    await sendEmail(mailDetails);
+        
     }
     return cb(null,user);
   } catch (error) {

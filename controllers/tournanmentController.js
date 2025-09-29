@@ -122,22 +122,22 @@ if (String(tournament.createdBy) !== String(userId)) {
   return res.status(403).json({ message: 'Only the creator can start this tournament' });
 }
 
-// ✅ Check payment depending on creator type
-let requiredRole = tournament.createdByModel === 'Host' ? 'host' : 'user';
+// // ✅ Check payment depending on creator type
+// let requiredRole = tournament.createdByModel === 'Host' ? 'host' : 'user';
 
-const creatorPayment = await Transaction.findOne({
-  user: userId,
-  tournament: id,
-  role: requiredRole,
-  status: 'success',
-  amount: 1000   // or make this dynamic if fee differs
-});
+// const creatorPayment = await Transaction.findOne({
+//   user: userId,
+//   tournament: id,`
+//   role: requiredRole,
+//   status: 'success',
+//   amount: 1000   // or make this dynamic if fee differs
+// });
 
-if (!creatorPayment) {
-  return res.status(400).json({ 
-    message: `${tournament.createdByModel} must pay ₦1000 fee before starting tournament `
-  });
-}
+// if (!creatorPayment) {
+//   return res.status(400).json({ 
+//     message: `${tournament.createdByModel} must pay ₦1000 fee before starting tournament `
+//   });
+// }
    
     //
     if (tournament.participants.length < tournament.minParticipants) {

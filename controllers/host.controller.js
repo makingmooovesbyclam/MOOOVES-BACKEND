@@ -52,17 +52,17 @@ exports.createHost = async (req, res) => {
 
     // // Construct verification link
     // const link = `${req.protocol}://${req.get('host')}/verify-user/${token}`;
-    // const firstName = fullName.trim().split(' ')[0];
+     const firstName = fullName.trim().split(' ')[0];
 
-    // // Setup email details
-    // const mailDetails = {
-    //   email: host.email,
-    //   subject: 'Welcome to the MOOOVES Platform!',
-    //   html: signup(link, firstName)
-    // };
+    //  Setup email details
+    const mailDetails = {
+      email: host.email,
+      subject: 'Welcome to the MOOOVES Platform!',
+      html: signup( firstName)
+    };
 
-    // // Send email
-    // await sendEmail(mailDetails);
+    // Send email
+    await sendEmail(mailDetails);
   
     // Send success response
     res.status(201).json({

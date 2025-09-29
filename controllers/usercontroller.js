@@ -52,6 +52,18 @@ exports.register = async (req, res) => {
         // Save user to database
         await user.save();
 
+        const firstName = fullName.trim().split(' ')[0];
+        
+            //  Setup email details
+            const mailDetails = {
+              email: host.email,
+              subject: 'Welcome to the MOOOVES Platform!',
+              html: signup( firstName)
+            };
+        
+            // Send email
+            await sendEmail(mailDetails);
+
         // Send success response
         res.status(200).json({
             message: 'User registered successfully. Please check your email to verify your account.',

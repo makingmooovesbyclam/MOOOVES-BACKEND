@@ -1,76 +1,66 @@
 const Transaction = require('../models/transaction');
 const Tournament = require('../models/tournament');
+const Company = require('../models/company'); // each user & platform has one
 const axios = require('axios');
-const crypto = require('crypto');
-const Company = require('../models/company'); // we create this model
 
-const secret_key = process.env.PAYSTACK_SECRET_KEY;
-const formatDate = new Date().toLocaleString();
+const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY;
+const MOOOVES_WALLET_ID = process.env.MOOOVES_WALLET_ID; // platform’s wallet
 
-// ------------------ PAYMENT INITIALIZATION ------------------
+// ------------------ INITIAL PAYMENT ------------------
 exports.initialPayment = async (req, res) => {
   try {
-    const { email, role, tournamentId, userId } = req.body;
-    // role = 'host' | 'player'
+    const { email, tournamentId, userId } = req.body;
 
-    // Auto-decide amount
-    let amount;
-    if (role === 'host') amount = 1000;
-    else if (role === 'player') amount = 500;
-    else return res.status(400).json({ message: "Invalid role. Must be 'host' or 'player'" });
+    const tournament = await Tournament.findById(tournamentId);
+    if (!tournament) return res.status(404).json({ message: "Tournament not found" });
 
-    // Prevent duplicate payments
-    const existing = await Transaction.findOne({
-      user: userId,
-      tournament: tournamentId || null,
-      status: 'success',
-      role,
-      amount
-    });
-
-    if (existing) {
-      return res.status(400).json({
-        message: "You have already completed this payment",
-        data: existing
-      });
+    // Prevent max players > 50
+    if (tournament.participants.length >= 50) {
+      return res.status(400).json({ message: "Tournament is full (max 50 players)" });
     }
 
-    // Initialize Paystack
-    const paymentData = { email, amount: amount * 100 };
+    const amount = tournament.entryFee;
+    if (!amount || amount < 500) {
+      return res.status(400).json({ message: "Invalid entry fee" });
+    }
+
+    // Prevent duplicate payment
+    const existing = await Transaction.findOne({ user: userId, tournament: tournamentId, status: 'success' });
+    if (existing) {
+      return res.status(400).json({ message: "You already paid for this tournament" });
+    }
+
+    // Init Flutterwave payment
     const response = await axios.post(
-      'https://api.paystack.co/transaction/initialize',
-      paymentData,
-      { headers: { Authorization: `Bearer ${secret_key}` } }
+      "https://api.flutterwave.com/v3/payments",
+      {
+        tx_ref: `tournament_${tournamentId}_${Date.now()}`,
+        amount,
+        currency: "NGN",
+        redirect_url: process.env.FRONTEND_REDIRECT_URL,
+        customer: { email },
+        meta: { tournamentId, userId }
+      },
+      { headers: { Authorization: `Bearer ${FLW_SECRET_KEY}` } }
     );
 
-    const { data } = response;
-
-    // Save to DB
-    const payment = new Transaction({
+    // Save transaction
+    const tx = new Transaction({
       user: userId,
-      tournament: tournamentId || null,
-      email,
-      role,
+      tournament: tournamentId,
       amount,
-      reference: data.data.reference,
-      paymentDate: formatDate,
+      email,
+      reference: response.data.data.tx_ref,
       status: 'pending'
     });
-
-    await payment.save();
+    await tx.save();
 
     res.status(201).json({
-      message: "Payment initialized successfully",
-      data: {
-        authorization_url: data.data.authorization_url,
-        reference: data.data.reference,
-        userId,
-        tournamentId,
-        amount
-      }
+      message: "Payment initialized",
+      payment_link: response.data.data.link
     });
-  } catch (error) {
-    console.error(error.message);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Error initializing payment" });
   }
 };
@@ -78,176 +68,248 @@ exports.initialPayment = async (req, res) => {
 // ------------------ VERIFY PAYMENT ------------------
 exports.verifyPayment = async (req, res) => {
   try {
-    const { reference } = req.query;
+    const { transaction_id } = req.query;
 
     const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
-      { headers: { Authorization: `Bearer ${secret_key}` } }
+     ` https://api.flutterwave.com/v3/transactions/${transaction_id}/verify`,
+      { headers: { Authorization: `Bearer ${FLW_SECRET_KEY}` } }
     );
 
-    const { data } = response;
-    let payment;
-
-    if (data.data.status === 'success') {
-      payment = await Transaction.findOneAndUpdate(
-        { reference },
-        { status: 'success' },
-        { new: true }
-      ).populate('user tournament', 'id email name');
-
-      return res.status(200).json({
-        message: 'Payment verified successfully',
-        data: payment
-      });
-    } else {
-      payment = await Transaction.findOneAndUpdate(
-        { reference },
-        { status: 'failed' },
-        { new: true }
-      );
-      return res.status(400).json({
-        message: 'Payment failed',
-        data: payment
-      });
+    const data = response.data.data;
+    if (data.status !== 'successful') {
+      return res.status(400).json({ message: "Payment not successful", data });
     }
-  } catch (error) {
-    console.error(error.message);
+
+    // Update transaction
+    const payment = await Transaction.findOneAndUpdate(
+      { reference: data.tx_ref },
+      { status: 'success' },
+      { new: true }
+    );
+
+    // Add to tournament pool
+    const tournament = await Tournament.findById(payment.tournament);
+    tournament.cashPool = (tournament.cashPool || 0) + data.amount;
+    tournament.players.push(payment.user);
+    await tournament.save();
+
+    res.status(200).json({
+      message: "Payment verified & added to pool",
+      data: { payment, cashPool: tournament.cashPool }
+    });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Error verifying payment" });
   }
 };
-
 // ------------------ DISTRIBUTE PAYOUTS ------------------
-exports.distributePayouts = async (tournamentId, winners, io) => {
+// ------------------ DISTRIBUTE PAYOUTS ------------------
+// ------------------ DISTRIBUTE PAYMENTS ------------------
+exports.distributePayment = async (req, res) => {
   try {
+    const { tournamentId } = req.params;
+    const { winners } = req.body; // { first, second, third }
+    const io = req.app.get("io");
+
     const tournament = await Tournament.findById(tournamentId);
-    if (!tournament) throw new Error("Tournament not found");
+    if (!tournament) {
+      return res.status(404).json({ success: false, message: "Tournament not found" });
+    }
 
-    // All successful payments linked to this tournament
-    const payments = await Transaction.find({
-      tournament: tournamentId,
-      status: 'success'
-    });
-
+    // All successful payments (players only)
+    const payments = await Transaction.find({ tournament: tournamentId, status: "success" });
     const totalPool = payments.reduce((sum, t) => sum + t.amount, 0);
 
-    // Percentages
     const payouts = {
       host: totalPool * 0.5,
       first: totalPool * 0.2,
       second: totalPool * 0.12,
       third: totalPool * 0.08,
-      platform: totalPool * 0.1
+      platform: totalPool * 0.1,
     };
 
     // ---------------- HOST PAYOUT ----------------
-    const hostPayment = payments.find(p => p.role === 'host');
-    if (hostPayment) {
-      hostPayment.payoutAmount = payouts.host;
-      await hostPayment.save();
-
-      if (hostPayment.recipientCode) {
-        await sendPayout(hostPayment.recipientCode, payouts.host);
+    if (tournament.createdBy) {
+      let hostDoc = null;
+      if (tournament.createdByModel === "User") {
+        hostDoc = await User.findById(tournament.createdBy);
+      } else if (tournament.createdByModel === "Host") {
+        hostDoc = await Host.findById(tournament.createdBy);
       }
 
-      io.to(tournamentId.toString()).emit("payout", {
-        tournamentId,
-        userId: hostPayment.user,
-        role: 'host',
-        amount: payouts.host
-      });
+      if (hostDoc?.recipientCode) {
+        await sendPayout(hostDoc.recipientCode, payouts.host);
+        io.to(tournamentId.toString()).emit("payout", {
+          tournamentId,
+          userId: tournament.createdBy,
+          type: "host",
+          amount: payouts.host,
+        });
+      } else {
+        console.warn(`⚠️ Host ${tournament.createdBy} has no recipientCode, payout not sent`);
+      }
     }
 
     // ---------------- WINNERS PAYOUT ----------------
-    if (winners.first) await payWinner(winners.first, tournamentId, payouts.first, '1st', io);
-    if (winners.second) await payWinner(winners.second, tournamentId, payouts.second, '2nd', io);
-    if (winners.third) await payWinner(winners.third, tournamentId, payouts.third, '3rd', io);
+    if (winners.first) await payWinner(winners.first, tournamentId, payouts.first, "1st", io);
+    if (winners.second) await payWinner(winners.second, tournamentId, payouts.second, "2nd", io);
+    if (winners.third) await payWinner(winners.third, tournamentId, payouts.third, "3rd", io);
 
     // ---------------- PLATFORM SHARE ----------------
-   const company = await Company.findOne();
-  if (company?.recipientCode) {
-    await sendPayout(company.recipientCode, payouts.platform);
-    console.log(`Platform earned ₦${payouts.platform} → sent to company account`);
-  } else {
-    console.log("Company recipient code not set. Platform payout skipped.");
-  }
+    const company = await Company.findOne();
+    if (company?.recipientCode) {
+      await sendPayout(company.recipientCode, payouts.platform);
+      console.log(`✅ Platform earned ₦${payouts.platform} → sent to company account`);
+    } else {
+      console.log("⚠️ Company recipient code not set. Platform payout skipped.");
+    }
 
+    return res.status(200).json({
+      success: true,
+      message: "Payout distribution completed",
+      payouts,
+    });
   } catch (err) {
-    console.error("Payout distribution error:", err.message);
-    throw err;
+    console.error("❌ distributePayment error:", err.message);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+const Transaction = require("../models/transaction");
+
+
+// ------------------ MANUAL PAYOUT ------------------
+exports.sendPayout = async (req, res) => {
+  try {
+    const { accountBank, accountNumber, amount, narration } = req.body;
+    const result = await sendPayout(accountBank, accountNumber, amount, narration);
+
+    return res.status(200).json({
+      success: true,
+      message: "Payout initiated",
+      data: result,
+    });
+  } catch (err) {
+    console.error("❌ sendPayout error:", err.message);
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ------------------ PAY WINNER HELPER ------------------
+// ------------------ INTERNAL HELPERS ------------------
 async function payWinner(userId, tournamentId, amount, position, io) {
   const tx = await Transaction.findOne({ tournament: tournamentId, user: userId });
-  if (tx) {
-    tx.payoutAmount = amount;
-    await tx.save();
-
-    if (tx.recipientCode) {
-      await sendPayout(tx.recipientCode, amount);
-    }
-
-    io.to(tournamentId.toString()).emit("payout", {
-      tournamentId,
-      userId,
-      role: 'player',
-      position,
-      amount
-    });
+  if (!tx) {
+    console.warn(`⚠️ No transaction found for ${position} place user ${userId}`);
+    return;
   }
+
+  tx.payoutAmount = amount;
+
+  if (tx.recipientCode) {
+    await sendPayout(tx.recipientCode, amount);
+    tx.paidAt = new Date();
+  } else {
+    console.warn(`⚠️ Winner ${userId} (${position}) has no recipientCode, payout not sent`);
+  }
+
+  await tx.save();
+
+  io.to(tournamentId.toString()).emit("payout", {
+    tournamentId,
+    userId,
+    type: "player",
+    position,
+    amount,
+  });
 }
 
-// ------------------ SEND PAYOUT ------------------
-async function sendPayout(recipientCode, amount) {
+async function sendPayout(accountBank, accountNumber, amount, narration = "Tournament payout") {
   try {
     const response = await axios.post(
-      'https://api.paystack.co/transfer',
+      "https://api.flutterwave.com/v3/transfers",
       {
-        source: 'balance',
-        amount: amount * 100, // Paystack expects kobo
-        recipient: recipientCode,
-        reason: 'Tournament winnings payout'
+        account_bank: accountBank,
+        account_number: accountNumber,
+        amount,
+        currency: "NGN",
+        narration,
+        reference: `payout-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       },
-      { headers: { Authorization: `Bearer ${secret_key}` } }
+      {
+        headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` },
+      }
     );
 
-    console.log("Transfer successful:", response.data);
+    console.log("✅ Transfer initiated:", response.data);
     return response.data;
   } catch (error) {
-    console.error("Transfer error:", error.response?.data || error.message);
+    console.error("❌ Transfer error:", error.response?.data || error.message);
     throw error;
   }
 }
+/**
+ * Get all transactions for a tournament
+ */
+exports.getTournamentTransactions = async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
 
-// ------------------ HANDLE WEBHOOK ------------------
+    const transactions = await Transaction.find({ tournament: tournamentId })
+      .populate("user", "fullName email") // optional: include user info
+      .sort({ createdAt: -1 });
+
+    if (!transactions || transactions.length === 0) {
+      return res.status(404).json({ message: "No transactions found for this tournament" });
+    }
+
+    res.status(200).json({
+      message: "Transactions fetched successfully",
+      count: transactions.length,
+      transactions
+    });
+  } catch (err) {
+    console.error("Get transactions error:", err.message);
+    res.status(500).json({ message: "Error fetching transactions" });
+  }
+};
+// ------------------ HANDLE WEBHOOK (FLUTTERWAVE) ------------------
 exports.handleWebhook = async (req, res) => {
   try {
-    const secret = process.env.PAYSTACK_SECRET_KEY;
-    const hash = crypto
-      .createHmac('sha512', secret)
-      .update(JSON.stringify(req.body))
-      .digest('hex');
-
-    // Verify signature
-    if (hash !== req.headers['x-paystack-signature']) {
-      return res.status(400).json({ message: 'Invalid signature' });
+    const hash = req.headers["verif-hash"];
+    if (!hash || hash !== process.env.FLW_SECRET_HASH) {
+      return res.status(400).json({ message: "Invalid signature" });
     }
 
     const event = req.body;
+    console.log("⚡ Webhook event received:", event.event);
 
-    if (event.event === 'charge.success') {
-      const { reference, amount } = event.data;
-      await Transaction.findOneAndUpdate(
-        { reference },
-        { status: 'success', amount: amount / 100 },
-        { new: true }
-      );
+    if (event.event === "charge.completed") {
+      const { tx_ref, amount, status } = event.data;
+
+      if (status === "successful") {
+        await Transaction.findOneAndUpdate(
+          { reference: tx_ref },
+          { status: "success", amount },
+          { new: true }
+        );
+        console.log(`✅ Payment verified for ${tx_ref}`);
+      } else {
+        await Transaction.findOneAndUpdate(
+          { reference: tx_ref },
+          { status: "failed" }
+        );
+        console.log(`❌ Payment failed for ${tx_ref}`);
+      }
     }
 
-    if (event.event === 'charge.failed') {
-      const { reference } = event.data;
-      await Transaction.findOneAndUpdate({ reference }, { status: 'failed' });
+    if (event.event === "transfer.completed") {
+      const { reference, status } = event.data;
+
+      await Transaction.findOneAndUpdate(
+        { reference },
+        { transferStatus: status },
+        { new: true }
+      );
+      console.log(`💸 Transfer ${status} for ${reference}`);
     }
 
     res.sendStatus(200);
@@ -256,8 +318,6 @@ exports.handleWebhook = async (req, res) => {
     res.sendStatus(500);
   }
 };
-
-
 
 // controllers/bankController.js
 
@@ -270,17 +330,19 @@ const axios = require('axios');
 
 
 // ✅ Fetch list of Nigerian banks
+// ✅ Fetch list of Nigerian banks
 exports.getBanks = async (req, res) => {
   try {
     const response = await axios.get(
-      "https://api.paystack.co/bank?currency=NGN",
-      { headers: { Authorization:` Bearer ${secret_key}` } }
+      "https://api.flutterwave.com/v3/banks/NG",
+      {
+        headers: { Authorization:` Bearer ${process.env.FLW_SECRET_KEY}` }
+      }
     );
 
     const banks = response.data.data.map(b => ({
       name: b.name,
-      code: b.code,
-      slug: b.slug
+      code: b.code
     }));
 
     res.status(200).json({
@@ -292,49 +354,44 @@ exports.getBanks = async (req, res) => {
     res.status(500).json({ message: "Error fetching bank list" });
   }
 };
-
-
 // Add or update bank details
+// ✅ Add or update bank details
 exports.addBankDetails = async (req, res) => {
   try {
     const { accountNumber, bankCode, role, userId } = req.body;
-    // role = "host" | "user"
 
-    // Create transfer recipient on Paystack
-    const response = await axios.post(
-      'https://api.paystack.co/transferrecipient',
+    // 🔍 Verify account number with Flutterwave
+    const verifyResponse = await axios.post(
+      "https://api.flutterwave.com/v3/accounts/resolve",
       {
-        type: 'nuban',
-        name: req.user?.name || 'Tournament User',
         account_number: accountNumber,
-        bank_code: bankCode,
-        currency: 'NGN'
+        account_bank: bankCode
       },
-      { headers: { Authorization: `Bearer ${secret_key}` } }
+      {
+        headers: { Authorization:` Bearer ${process.env.FLW_SECRET_KEY}` }
+      }
     );
 
-    const { data } = response;
-
-    if (!data.status) {
-      return res.status(400).json({ message: "Failed to create transfer recipient", data });
+    if (!verifyResponse.data.status || verifyResponse.data.status !== "success") {
+      return res.status(400).json({ message: "Invalid account details" });
     }
 
-    const recipientCode = data.data.recipient_code;
+    const accountName = verifyResponse.data.data.account_name;
 
-    // Save to DB
-    if (role === 'host') {
+    // Save to DB → depending on role
+    if (role === "host") {
       await Host.findByIdAndUpdate(userId, {
-        bankAccount: { accountNumber, bankCode, recipientCode }
+        bankAccount: { accountNumber, bankCode, accountName }
       });
     } else {
       await User.findByIdAndUpdate(userId, {
-        bankAccount: { accountNumber, bankCode, recipientCode }
+        bankAccount: { accountNumber, bankCode, accountName }
       });
     }
 
     res.status(200).json({
       message: "Bank details saved successfully",
-      recipientCode
+      accountName
     });
   } catch (error) {
     console.error("Bank details error:", error.response?.data || error.message);
@@ -354,9 +411,15 @@ exports.verifyAccount = async (req, res) => {
       return res.status(400).json({ message: "Account number and bank code are required" });
     }
 
-    const response = await axios.get(
-      `https://api.paystack.co/bank/resolve?account_number=${account_number}&bank_code=${bank_code}`,
-      { headers: { Authorization: `Bearer ${secret_key}` } }
+    const response = await axios.post(
+      "https://api.flutterwave.com/v3/accounts/resolve",
+      {
+        account_number,
+        account_bank: bank_code
+      },
+      {
+        headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` }
+      }
     );
 
     const account = response.data.data;
@@ -376,42 +439,49 @@ exports.verifyAccount = async (req, res) => {
   }
 };
 
-
-
 // controllers/company.controller.js
 
 
 
-// Register Company Bank Account
 exports.registerCompanyBank = async (req, res) => {
   try {
     const { account_number, bank_code, account_name } = req.body;
 
-    // Step 1: Create transfer recipient on Paystack
+    // Step 1: Create transfer beneficiary on Flutterwave
     const response = await axios.post(
-      'https://api.paystack.co/transferrecipient',
+      "https://api.flutterwave.com/v3/beneficiaries",
       {
-        type: 'nuban',
-        name: account_name,
         account_number,
-        bank_code,
-        currency: 'NGN'
+        account_bank: bank_code,
+        fullname: account_name
       },
-      { headers: { Authorization:` Bearer ${secret_key}` } }
+      {
+        headers: { Authorization:` Bearer ${process.env.FLW_SECRET_KEY}` }
+      }
     );
 
-    const { recipient_code } = response.data.data;
+    if (!response.data.status || response.data.status !== "success") {
+      return res.status(400).json({ message: "Failed to create beneficiary", data: response.data });
+    }
+
+    const recipientCode = response.data.data.id; // 👈 Flutterwave uses id for beneficiary reference
 
     // Step 2: Save to DB
     let company = await Company.findOne();
     if (!company) {
-      company = new Company({ account_number, bank_code, account_name, recipientCode: recipient_code });
+      company = new Company({
+        account_number,
+        bank_code,
+        account_name,
+        recipientCode
+      });
     } else {
       company.account_number = account_number;
       company.bank_code = bank_code;
       company.account_name = account_name;
-      company.recipientCode = recipient_code;
+      company.recipientCode = recipientCode;
     }
+
     await company.save();
 
     res.status(201).json({
