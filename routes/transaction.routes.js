@@ -34,6 +34,68 @@ const transaction = require('../controllers/transaction');
  */
 router.get('/banks', transaction.getBanks);
 
+
+/**
+ * @swagger
+ * /api/v1/banks/find:
+ *   post:
+ *     tags:
+ *       - Banks
+ *     summary: Find a Nigerian bank by name
+ *     description: Search for banks in Nigeria using Flutterwave's bank list API. Provide a bank name in the request body to get its code.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: "OPay"
+ *     responses:
+ *       200:
+ *         description: Bank(s) found
+ *         content:
+ *           application/json:
+ *             examples:
+ *               success:
+ *                 summary: Bank found
+ *                 value:
+ *                   message: Bank(s) found
+ *                   banks:
+ *                     - name: "Opay Digital Services Limited (OPay)"
+ *                       code: "999991"
+ *       400:
+ *         description: Missing required field
+ *         content:
+ *           application/json:
+ *             examples:
+ *               missingName:
+ *                 summary: Name not provided
+ *                 value:
+ *                   message: "Bank name is required"
+ *       404:
+ *         description: Bank not found
+ *         content:
+ *           application/json:
+ *             examples:
+ *               notFound:
+ *                 summary: Bank does not exist
+ *                 value:
+ *                   message: "No bank found matching \"XYZ\""
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             examples:
+ *               flutterwaveError:
+ *                 summary: Error fetching from Flutterwave
+ *                 value:
+ *                   message: "Error finding bank"
+ */
+router.post('/banks/find', transaction.findBanks);
+
 /**
  * @swagger
  *  /api/v1/verify:
@@ -41,6 +103,7 @@ router.get('/banks', transaction.getBanks);
  *     summary: Verify a tournament payment
  *     description: Verifies a payment using Flutterwave transaction ID, updates tournament pool and transaction status.
  *     tags: [Payments]
+    *     security: [] # No authentication required
  *     parameters:
  *       - in: query
  *         name: transaction_id

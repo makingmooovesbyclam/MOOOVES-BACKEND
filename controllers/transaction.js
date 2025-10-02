@@ -89,8 +89,8 @@ exports.verifyPayment = async (req, res) => {
 
     // Add to tournament pool
     const tournament = await Tournament.findById(payment.tournament);
-    tournament.cashPool = (tournament.cashPool || 0) + data.amount;
-    tournament.players.push(payment.user);
+    tournament.prizePool = (tournament.prizePool || 0) + data.amount;
+    tournament.participants.push(payment.user);
     await tournament.save();
 
     res.status(200).json({
@@ -335,7 +335,7 @@ exports.getBanks = async (req, res) => {
     const response = await axios.get(
       "https://api.flutterwave.com/v3/banks/NG",
       {
-        headers: { Authorization:` Bearer ${process.env.FLW_SECRET_KEY}` }
+        headers: { Authorization:`Bearer ${process.env.FLW_SECRET_KEY}` }
       }
     );
 
@@ -343,6 +343,47 @@ exports.getBanks = async (req, res) => {
       name: b.name,
       code: b.code
     }));
+
+    res.status(200).json({
+      message: "Banks fetched successfully",
+      banks
+    });
+  } catch (error) {
+    console.error("Get banks error:", error.response?.data || error.message);
+    res.status(500).json({ message: "Error fetching bank list" });
+  }
+};
+
+// controllers/bankController.js
+
+
+exports.findBanks = async (req, res) => {
+  try {
+    const { name } = req.query; // optional query param e.g. /banks?name=OPay
+
+    const response = await axios.get(
+      "https://api.flutterwave.com/v3/banks/NG",
+      {
+        headers: { Authorization:`Bearer ${process.env.FLW_SECRET_KEY}` }
+      }
+    );
+
+    let banks = response.data.data.map(b => ({
+      name: b.name,
+      code: b.code
+    }));
+
+    // 🔍 If user provides a bank name, filter
+    if (name) {
+      const search = name.toLowerCase();
+      banks = banks.filter(b => b.name.toLowerCase().includes(search));
+
+      if (banks.length === 0) {
+        return res.status(404).json({
+          message:` No bank found matching "${name}"`
+        });
+      }
+    }
 
     res.status(200).json({
       message: "Banks fetched successfully",

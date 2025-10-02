@@ -24,10 +24,13 @@ const authMiddleware  = require('../middlewares/authMiddleware')
  *             properties:
  *               name:
  *                 type: string
- *                 example: "Summer Championship"
+ *                 example: "strange"
  *               maxPlayers:
  *                 type: string
  *                 example: "25"
+ *               entryfee:
+ *                 type: Number
+ *                 example: "500"
  *               organizerId:
  *                 type: string
  *                 description: ID of the user or host creating the tournament

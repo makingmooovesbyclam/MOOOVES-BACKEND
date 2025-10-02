@@ -13,7 +13,7 @@ const crypto = require('crypto');
 
 exports.createTournament = async (req, res) => {
   try {
-    const { organizerId, name, maxPlayers } = req.body;
+    const { organizerId, name, maxPlayers,entryFee } = req.body;
 
     if (!organizerId || !name) {
       return res.status(400).json({ error: "Host and name are required" });
@@ -72,7 +72,7 @@ const tournament = new Tournament({
   createdByModel: creatorModel,   // 👈 key part
   participants: [],
   maxParticipants: maxPlayers,
-  entryFee: entryFee,
+  entryFee,
   prizePool: 0,
   inviteCode,
   status: 'pending'
