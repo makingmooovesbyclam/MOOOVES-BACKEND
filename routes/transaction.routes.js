@@ -208,7 +208,7 @@ router.get('/verify', transaction.verifyPayment);
  *             example:
  *               message: "Error adding bank details"
  */
-router.post('/bank-details', transaction.addBankDetails);
+router.post('/bank/add', transaction.addBankDetails);
 
 
 /**
