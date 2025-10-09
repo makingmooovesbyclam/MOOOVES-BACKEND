@@ -40,7 +40,8 @@ router.get('/banks', transaction.getBanks);
  * /api/v1/banks/find:
  *   post:
  *     tags:
- *       - Banks
+ *       - Payment
+     *     security: [] # No authentication required
  *     summary: Find a Nigerian bank by name
  *     description: Search for banks in Nigeria using Flutterwave's bank list API. Provide a bank name in the request body to get its code.
  *     requestBody:
@@ -102,7 +103,7 @@ router.post('/banks/find', transaction.findBanks);
  *   get:
  *     summary: Verify a tournament payment
  *     description: Verifies a payment using Flutterwave transaction ID, updates tournament pool and transaction status.
- *     tags: [Payments]
+ *     tags: [Payment]
     *     security: [] # No authentication required
  *     parameters:
  *       - in: query
@@ -157,10 +158,11 @@ router.get('/verify', transaction.verifyPayment);
 // Add or update bank details
 /**
  * @swagger
- * /bank/add:
+ * /api/v1/bank/add:
  *   post:
  *     summary: Add and save verified bank details for a user or host
- *     tags: [Bank]
+ *     tags: [Payment]
+ *     security: [] # No authentication required
  *     requestBody:
  *       required: true
  *       content:
