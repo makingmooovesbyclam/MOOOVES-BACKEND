@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../helper/nodemailer');
 const signup = require('../helper/signup')
-
+const Host = require('../models/host.js');
 exports.register = async (req, res) => {
     try {
         // Extract required fields from the request body
@@ -15,7 +15,7 @@ exports.register = async (req, res) => {
                 message: "Please provide fullName, email, password, and repeatPassword"
             });
         }
-
+        
         // Check if passwords match
         if (password !== repeatPassword) {
             return res.status(400).json({
@@ -23,6 +23,14 @@ exports.register = async (req, res) => {
             });
         }
 
+        // Check if user email exists
+        const usersExists = await Host.findOne({ email: email.toLowerCase().trim() });
+        if (usersExists) {
+            return res.status(400).json({
+                message:` Email: ${email} already in use as Host Please kindly 
+                make a change of Email`
+            });
+        }
         // Check if user email exists
         const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
         if (userExists) {
@@ -316,7 +324,7 @@ exports.grantHostAccess = async (req, res) => {
 
 
 
-const Host = require('../models/host.js');
+
 // const User = require('../models/user');/
 
 // 🔹 POST /api/v1/auth/forgot

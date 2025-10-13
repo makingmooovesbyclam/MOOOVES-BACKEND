@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const Host = require('../models/host');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../helper/nodemailer');
+const userModel = require('../models/user.js');
 const signup = require('../helper/signup')
 exports.createHost = async (req, res) => {
   try {
@@ -19,7 +20,12 @@ exports.createHost = async (req, res) => {
                 });
             }
     
-
+const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
+        if (userExists) {
+            return res.status(400).json({
+                message:` Email: ${email} already in use`
+            });
+        }
     // Check if host with email already exists
     const existing = await Host.findOne({ email: email.toLowerCase().trim() });
     if (existing) {
