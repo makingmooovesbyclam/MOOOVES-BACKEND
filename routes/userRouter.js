@@ -557,7 +557,7 @@ router.post('/grant-host-access', grantHostAccess);
 
 /**
  * @swagger
- * /api/v1/auth/forgot:
+ * /api/v1/forgot:
  *   post:
  *     summary: Request password reset (for User or Host)
  *     description: >
@@ -565,6 +565,7 @@ router.post('/grant-host-access', grantHostAccess);
  *       Returns { found: true } if the account exists, along with the account ID and type.
  *       The frontend will then use this ID for the reset step.
  *     tags: [Auth]
+  *     security: [] # No authentication required
  *     requestBody:
  *       required: true
  *       content:
@@ -611,13 +612,14 @@ router.post('/grant-host-access', grantHostAccess);
 
 /**
  * @swagger
- * /api/v1/auth/forgot/reset:
+ * /api/v1/forgot/reset:
  *   post:
  *     summary: Reset account password
  *     description: >
  *       Resets the password for a User or Host based on the provided account ID.  
  *       The frontend supplies the id (from the /forgot response) and a new password.
  *     tags: [Auth]
+  *     security: [] # No authentication required
  *     requestBody:
  *       required: true
  *       content:
