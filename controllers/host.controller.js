@@ -23,7 +23,8 @@ exports.createHost = async (req, res) => {
 const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
         if (userExists) {
             return res.status(400).json({
-                message:` Email: ${email} already in use`
+                message:` Email: ${email} already in use as User Please kindly 
+                make a change of Email`
             });
         }
     // Check if host with email already exists

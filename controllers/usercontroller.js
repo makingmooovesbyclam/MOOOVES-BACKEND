@@ -5,87 +5,75 @@ const sendEmail = require('../helper/nodemailer');
 const signup = require('../helper/signup')
 const Host = require('../models/host.js');
 exports.register = async (req, res) => {
-    try {
-        // Extract required fields from the request body
-        const { fullName, email, password, repeatPassword } = req.body;
+  try {
+    const { fullName, email, password, repeatPassword } = req.body;
 
-        // Check if any required field is missing
-        if (!fullName || !email || !password || !repeatPassword) {
-            return res.status(400).json({
-                message: "Please provide fullName, email, password, and repeatPassword"
-            });
-        }
-        
-        // Check if passwords match
-        if (password !== repeatPassword) {
-            return res.status(400).json({
-                message: "Passwords do not match"
-            });
-        }
-
-        // Check if user email exists
-        const usersExists = await Host.findOne({ email: email.toLowerCase().trim() });
-        if (usersExists) {
-            return res.status(400).json({
-                message:` Email: ${email} already in use as Host Please kindly 
-                make a change of Email`
-            });
-        }
-        // Check if user email exists
-        const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
-        if (userExists) {
-            return res.status(400).json({
-                message:` Email: ${email} already in use`
-            });
-        }
-        
-        const usernameExists = await userModel.findOne({fullName : fullName.toLowerCase().trim() });
-        if (usernameExists) {
-            return res.status(400).json({
-                message:` Name: ${fullName} already in use`
-            });
-        }
-        
-
-        // Salt and hash the password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Create a new user instance
-        const user = new userModel({
-            fullName: fullName.trim(),
-            email: email.trim(),
-            password: hashedPassword
-        });
-
-        // Save user to database
-        await user.save();
-
-        const firstName = fullName.trim().split(' ')[0];
-        
-            //  Setup email details
-            const mailDetails = {
-              email: host.email,
-              subject: 'Welcome to the MOOOVES Platform!',
-              html: signup( firstName)
-            };
-        
-            // Send email
-            await sendEmail(mailDetails);
-
-        // Send success response
-        res.status(200).json({
-            message: 'User registered successfully. Please check your email to verify your account.',
-            data: user
-        });
-
-    } catch (error) {
-        console.log(error.message);
-        res.status(500).json({
-            message: 'Internal Server Error'
-        });
+    if (!fullName || !email || !password || !repeatPassword) {
+      return res.status(400).json({
+        message: "Please provide fullName, email, password, and repeatPassword",
+      });
     }
-};
 
+    if (password !== repeatPassword) {
+      return res.status(400).json({
+        message: "Passwords do not match",
+      });
+    }
+
+    const userExistsInHost = await Host.findOne({ email: email.toLowerCase().trim() });
+    if (userExistsInHost) {
+      return res.status(400).json({
+        message: `Email: ${email} already in use as Host. Please use a different email.`,
+      });
+    }
+
+    const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
+    if (userExists) {
+      return res.status(400).json({
+        message: `Email: ${email} already in use.`,
+      });
+    }
+
+    const nameExists = await userModel.findOne({ fullName: fullName.toLowerCase().trim() });
+    if (nameExists) {
+      return res.status(400).json({
+        message:` Name: ${fullName} already in use.`,
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new userModel({
+      fullName: fullName.trim(),
+      email: email.trim().toLowerCase(),
+      password: hashedPassword,
+    });
+
+    await user.save();
+
+    const firstName = fullName.trim().split(" ")[0];
+
+    // ✅ Fixed: use user.email instead of host.email
+    const mailDetails = {
+      email: user.email,
+      subject: "Welcome to the MOOOVES Platform!",
+      html: signup(firstName),
+    };
+
+    await sendEmail(mailDetails);
+
+    return res.status(200).json({
+      message: "User registered successfully.",
+      data: user,
+    });
+  } catch (error) {
+    console.error("❌ Register error:", error.message);
+    return res.status(500).json({
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
 // exports.verifyUser = async (req,res)=>{
 //     try {
 //         //Get the token from the params
