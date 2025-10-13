@@ -105,21 +105,35 @@ exports.verifyPayment = async (req, res) => {
 // ------------------ DISTRIBUTE PAYOUTS ------------------
 // ------------------ DISTRIBUTE PAYOUTS ------------------
 // ------------------ DISTRIBUTE PAYMENTS ------------------
+
+const User = require("../models/user");
+const Host = require("../models/host");
+
+
+// ------------------ DISTRIBUTE PAYOUT ------------------
 exports.distributePayment = async (req, res) => {
   try {
     const { tournamentId } = req.params;
     const { winners } = req.body; // { first, second, third }
     const io = req.app.get("io");
 
+    // ✅ Find tournament
     const tournament = await Tournament.findById(tournamentId);
-    if (!tournament) {
+    if (!tournament)
       return res.status(404).json({ success: false, message: "Tournament not found" });
-    }
 
-    // All successful payments (players only)
-    const payments = await Transaction.find({ tournament: tournamentId, status: "success" });
+    // ✅ Get all successful transactions (players only)
+    const payments = await Transaction.find({
+      tournament: tournamentId,
+      status: "success",
+    });
+
+    if (payments.length === 0)
+      return res.status(400).json({ success: false, message: "No successful payments found" });
+
     const totalPool = payments.reduce((sum, t) => sum + t.amount, 0);
 
+    // ✅ Distribution Logic
     const payouts = {
       host: totalPool * 0.5,
       first: totalPool * 0.2,
@@ -137,8 +151,10 @@ exports.distributePayment = async (req, res) => {
         hostDoc = await Host.findById(tournament.createdBy);
       }
 
-      if (hostDoc?.recipientCode) {
-        await sendPayout(hostDoc.recipientCode, payouts.host);
+      if (hostDoc?.bankAccount?.accountNumber && hostDoc?.bankAccount?.bankCode) {
+        const { bankCode, accountNumber } = hostDoc.bankAccount;
+        await sendPayout(bankCode, accountNumber, payouts.host, "Host tournament payout");
+
         io.to(tournamentId.toString()).emit("payout", {
           tournamentId,
           userId: tournament.createdBy,
@@ -146,7 +162,7 @@ exports.distributePayment = async (req, res) => {
           amount: payouts.host,
         });
       } else {
-        console.warn(`⚠️ Host ${tournament.createdBy} has no recipientCode, payout not sent`);
+        console.warn(`⚠️ Host ${tournament.createdBy} has no bank account info`);
       }
     }
 
@@ -157,11 +173,11 @@ exports.distributePayment = async (req, res) => {
 
     // ---------------- PLATFORM SHARE ----------------
     const company = await Company.findOne();
-    if (company?.recipientCode) {
-      await sendPayout(company.recipientCode, payouts.platform);
-      console.log(`✅ Platform earned ₦${payouts.platform} → sent to company account`);
+    if (company?.account_number && company?.bank_code) {
+      await sendPayout(company.bank_code, company.account_number, payouts.platform, "Platform share");
+      console.log(`✅ Platform earned ₦${payouts.platform} sent to company account`);
     } else {
-      console.log("⚠️ Company recipient code not set. Platform payout skipped.");
+      console.warn("⚠️ Company account not set. Platform payout skipped.");
     }
 
     return res.status(200).json({
@@ -175,43 +191,21 @@ exports.distributePayment = async (req, res) => {
   }
 };
 
-
-
-// ------------------ MANUAL PAYOUT ------------------
-exports.sendPayout = async (req, res) => {
-  try {
-    const { accountBank, accountNumber, amount, narration } = req.body;
-    const result = await sendPayout(accountBank, accountNumber, amount, narration);
-
-    return res.status(200).json({
-      success: true,
-      message: "Payout initiated",
-      data: result,
-    });
-  } catch (err) {
-    console.error("❌ sendPayout error:", err.message);
-    return res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-// ------------------ INTERNAL HELPERS ------------------
+// ------------------ PAY WINNER HELPER ------------------
 async function payWinner(userId, tournamentId, amount, position, io) {
-  const tx = await Transaction.findOne({ tournament: tournamentId, user: userId });
-  if (!tx) {
-    console.warn(`⚠️ No transaction found for ${position} place user ${userId}`);
+  const user = await User.findById(userId);
+  if (!user) {
+    console.warn(`⚠️ Winner ${userId} not found`);
     return;
   }
 
-  tx.payoutAmount = amount;
-
-  if (tx.recipientCode) {
-    await sendPayout(tx.recipientCode, amount);
-    tx.paidAt = new Date();
-  } else {
-    console.warn(`⚠️ Winner ${userId} (${position}) has no recipientCode, payout not sent`);
+  const { bankAccount } = user;
+  if (!bankAccount?.accountNumber || !bankAccount?.bankCode) {
+    console.warn(`⚠️ Winner ${userId} (${position}) missing bank details`);
+    return;
   }
 
-  await tx.save();
+  await sendPayout(bankAccount.bankCode, bankAccount.accountNumber, amount, `${position} place payout`);
 
   io.to(tournamentId.toString()).emit("payout", {
     tournamentId,
@@ -222,6 +216,7 @@ async function payWinner(userId, tournamentId, amount, position, io) {
   });
 }
 
+// ------------------ SEND PAYOUT HELPER ------------------
 async function sendPayout(accountBank, accountNumber, amount, narration = "Tournament payout") {
   try {
     const response = await axios.post(
@@ -232,7 +227,7 @@ async function sendPayout(accountBank, accountNumber, amount, narration = "Tourn
         amount,
         currency: "NGN",
         narration,
-        reference: `payout-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        reference:` payout-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       },
       {
         headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` },
@@ -246,7 +241,62 @@ async function sendPayout(accountBank, accountNumber, amount, narration = "Tourn
     throw error;
   }
 }
+
+
+
 /**
+ * @desc Manual payout fallback endpoint
+ * @route POST /api/v1/payouts/send
+ * @access Public (but can be protected later)
+ */
+exports.sendPayout = async (req, res) => {
+  try {
+    const { accountBank, accountNumber, amount, narration } = req.body;
+
+    // ✅ Validation
+    if (!accountBank || !accountNumber || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: "accountBank, accountNumber, and amount are required",
+      });
+    }
+
+    // ✅ Prepare transfer payload
+    const payload = {
+      account_bank: accountBank,
+      account_number: accountNumber,
+      amount,
+      currency: "NGN",
+      narration: narration || "Manual tournament payout",
+      reference: `manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    };
+
+    // ✅ Send request to Flutterwave
+    const response = await axios.post("https://api.flutterwave.com/v3/transfers", payload, {
+      headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` },
+    });
+
+    // ✅ Log success and return
+    console.log("✅ Manual transfer initiated:", response.data);
+
+    return res.status(200).json({
+      success: true,
+      message: "Payout initiated",
+      data: response.data,
+    });
+  } catch (error) {
+    console.error("❌ Manual payout error:", error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Payout transfer failed",
+      error: error.response?.data || error.message,
+    });
+  }
+};
+
+
+/**
+ * 
  * Get all transactions for a tournament
  */
 exports.getTournamentTransactions = async (req, res) => {
@@ -321,8 +371,8 @@ exports.handleWebhook = async (req, res) => {
 
 // controllers/bankController.js
 
-const Host = require('../models/host');
-const User = require('../models/user');
+// const Host = require('../models/host');
+// const User = require('../models/user');
 
 
 
@@ -398,44 +448,90 @@ exports.findBanks = async (req, res) => {
 // ✅ Add or update bank details
 exports.addBankDetails = async (req, res) => {
   try {
-    const { accountNumber, bankCode, role, userId } = req.body;
+    const { accountNumber, bankCode, userId, role } = req.body;
 
-    // 🔍 Verify account number with Flutterwave
+    if (!accountNumber || !bankCode  || !userId || !role) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Verify bank account via Flutterwave
     const verifyResponse = await axios.post(
       "https://api.flutterwave.com/v3/accounts/resolve",
       {
         account_number: accountNumber,
-        account_bank: bankCode
+        account_bank: bankCode,
       },
       {
-        headers: { Authorization:` Bearer ${process.env.FLW_SECRET_KEY}` }
+        headers: {
+          Authorization: `Bearer ${process.env.FLW_SECRET_KEY}`,
+        },
       }
     );
 
-    if (!verifyResponse.data.status || verifyResponse.data.status !== "success") {
+    if (!verifyResponse.data || verifyResponse.data.status !== "success") {
       return res.status(400).json({ message: "Invalid account details" });
     }
 
     const accountName = verifyResponse.data.data.account_name;
 
-    // Save to DB → depending on role
+    // 🧩 Case 1: Role is Host
     if (role === "host") {
-      await Host.findByIdAndUpdate(userId, {
-        bankAccount: { accountNumber, bankCode, accountName }
-      });
-    } else {
-      await User.findByIdAndUpdate(userId, {
-        bankAccount: { accountNumber, bankCode, accountName }
+      const host = await Host.findById(userId);
+      if (!host) {
+        // Host doesn’t exist, check if user is trying to act as host
+        const user = await User.findById(userId);
+        if (!user) {
+          return res.status(404).json({ message: "User or Host not found" });
+        }
+
+        // ✅ User is acting as host but not a real host → save to User model
+        await User.findByIdAndUpdate(userId, {
+          bankAccount: { accountName, accountNumber, bankCode },
+        });
+
+        return res.status(200).json({
+          message: "Bank details saved under user profile (acting as host)",
+          accountName,
+        });
+      }
+
+      // ✅ Host exists → update Host record
+      host.bankAccount = { accountName, accountNumber, bankCode };
+      await host.save();
+
+      return res.status(200).json({
+        message: "Bank details saved successfully (host)",
+        accountName,
       });
     }
 
-    res.status(200).json({
-      message: "Bank details saved successfully",
-      accountName
-    });
+    // 🧍‍♂️ Case 2: Role is User
+    else if (role === "user") {
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      await User.findByIdAndUpdate(userId, {
+        bankAccount: { accountName, accountNumber, bankCode },
+      });
+
+      return res.status(200).json({
+        message: "Bank details saved successfully (user)",
+        accountName,
+      });
+    }
+
+    // 🚫 Invalid Role
+    else {
+      return res.status(400).json({ message: "Invalid role" });
+    }
   } catch (error) {
     console.error("Bank details error:", error.response?.data || error.message);
-    res.status(500).json({ message: "Error adding bank details" });
+    res.status(500).json({
+      message: "Error adding bank details",
+      error: error.response?.data || error.message,
+    });
   }
 };
 

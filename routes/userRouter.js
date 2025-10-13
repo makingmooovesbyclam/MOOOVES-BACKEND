@@ -1,4 +1,4 @@
-const { register, verifyUser, login,logoutUser,getUsers,getoneUser,updateUser,deleteUser,grantHostAccess,requestHostAccess } = require('../controllers/usercontroller');
+const { register, verifyUser, login,logoutUser,getUsers,getoneUser,forgotPassword,resetPassword,updateUser,deleteUser,grantHostAccess,requestHostAccess } = require('../controllers/usercontroller');
 const {registers} = require('../middlewares/validator')
 const jwt = require('jsonwebtoken');
 const passport = require('passport')
@@ -543,5 +543,129 @@ router.post('/request-host-access', requestHostAccess);
  *               details: "Error details here"
  */
 router.post('/grant-host-access', grantHostAccess);
+
+
+
+
+
+/**
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: User & Host onboarding and password recovery
+ */
+
+/**
+ * @swagger
+ * /api/v1/auth/forgot:
+ *   post:
+ *     summary: Request password reset (for User or Host)
+ *     description: >
+ *       Checks whether the given email exists in either the User or Host collection.  
+ *       Returns { found: true } if the account exists, along with the account ID and type.
+ *       The frontend will then use this ID for the reset step.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: "player@example.com"
+ *     responses:
+ *       200:
+ *         description: Account found and ID returned.
+ *         content:
+ *           application/json:
+ *             example:
+ *               found: true
+ *               id: "670655cb9c4c03e3a86e71e0"
+ *               accountType: "user"
+ *       404:
+ *         description: Account not found.
+ *         content:
+ *           application/json:
+ *             example:
+ *               found: false
+ *       400:
+ *         description: Invalid or missing email.
+ *         content:
+ *           application/json:
+ *             example:
+ *               found: false
+ *               message: "Email is required"
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             example:
+ *               found: false
+ *               message: "Server error"
+ */
+
+/**
+ * @swagger
+ * /api/v1/auth/forgot/reset:
+ *   post:
+ *     summary: Reset account password
+ *     description: >
+ *       Resets the password for a User or Host based on the provided account ID.  
+ *       The frontend supplies the id (from the /forgot response) and a new password.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - id
+ *               - newPassword
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 example: "670655cb9c4c03e3a86e71e0"
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 example: "NewPassword123!"
+ *     responses:
+ *       200:
+ *         description: Password reset successful.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *       400:
+ *         description: Missing fields or invalid payload.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Missing fields"
+ *       404:
+ *         description: Account not found.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Account not found"
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Server error"
+ */
+// Forgot and Reset endpoints
+router.post('/forgot', forgotPassword);
+router.post('/forgot/reset', resetPassword);
 
 module.exports = router

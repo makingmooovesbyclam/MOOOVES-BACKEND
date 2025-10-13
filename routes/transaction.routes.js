@@ -290,21 +290,35 @@ router.post('/initial', transaction.initialPayment);
 
 
 
+
 /**
  * @swagger
- * /api/v1/payouts/distribute/{tournamentId}:
+ * /api/v1/distribute/{tournamentId}:
  *   post:
- *     summary: Distribute payouts for a tournament
- *     description: Distributes prize pool among host, winners (1st, 2nd, 3rd), and platform. Requires winners in body.
+ *     summary: Distribute tournament prize payouts to host, winners, and platform
+ *     description: >
+ *       This endpoint calculates and transfers payouts for a tournament based on total payments made by participants.
+ *       <br><br>
+ *       Distribution Formula
+ *       - 🧑‍💼 Host → 50% of total pool  
+ *       - 🥇 1st Place → 20%  
+ *       - 🥈 2nd Place → 12%  
+ *       - 🥉 3rd Place → 8%  
+ *       - 🏢 Platform → 10%
+ *       <br><br>
+ *       Requires valid Flutterwave API key for transfers.
+ *
  *     tags: [Payment]
    *     security: [] # No authentication required
+ *
  *     parameters:
  *       - in: path
  *         name: tournamentId
  *         required: true
  *         schema:
  *           type: string
- *         description: Tournament ID
+ *         description: The ID of the tournament for which to distribute payments.
+ *
  *     requestBody:
  *       required: true
  *       content:
@@ -316,20 +330,25 @@ router.post('/initial', transaction.initialPayment);
  *             properties:
  *               winners:
  *                 type: object
+ *                 description: IDs of the top 3 winners.
  *                 properties:
  *                   first:
  *                     type: string
- *                     description: User ID of 1st place winner
- *                     example: "64fbc23eac1234abcd567890"
+ *                     example: "6705f20e3c8f8b3b4c42f10b"
  *                   second:
  *                     type: string
- *                     description: User ID of 2nd place winner
+ *                     example: "6705f21b3c8f8b3b4c42f12d"
  *                   third:
  *                     type: string
- *                     description: User ID of 3rd place winner
+ *                     example: "6705f22a3c8f8b3b4c42f14e"
+ *                 example:
+ *                   first: "6705f20e3c8f8b3b4c42f10b"
+ *                   second: "6705f21b3c8f8b3b4c42f12d"
+ *                   third: "6705f22a3c8f8b3b4c42f14e"
+ *
  *     responses:
  *       200:
- *         description: Payout distribution completed
+ *         description: Payouts distributed successfully
  *         content:
  *           application/json:
  *             schema:
@@ -341,21 +360,48 @@ router.post('/initial', transaction.initialPayment);
  *                 message:
  *                   type: string
  *                   example: "Payout distribution completed"
+ *                 payouts:
+ *                   type: object
+ *                   properties:
+ *                     host:
+ *                       type: number
+ *                       example: 5000
+ *                     first:
+ *                       type: number
+ *                       example: 2000
+ *                     second:
+ *                       type: number
+ *                       example: 1200
+ *                     third:
+ *                       type: number
+ *                       example: 800
+ *                     platform:
+ *                       type: number
+ *                       example: 1000
+ *
  *       400:
- *         description: Invalid request or missing data
+ *         description: Invalid request or missing payment records
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Tournament not found"
+ *             example:
+ *               success: false
+ *               message: "No successful payments found"
+ *
+ *       404:
+ *         description: Tournament not found
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Tournament not found"
+ *
  *       500:
- *         description: Internal server error during payout distribution
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Internal server error"
  */
 router.post(
   '/distribute/:tournamentId',
@@ -365,12 +411,18 @@ router.post(
 
 /**
  * @swagger
- * /api/v1/payouts/send:
+ * /api/v1/send:
  *   post:
- *     summary: Send a manual payout
- *     description: Directly send money to a bank account via Flutterwave.
- *     tags: [Payment]
-   *     security: [] # No authentication required
+ *     summary: Send a manual payout (fallback method)
+ *     description: >
+ *       This endpoint allows an admin or fallback handler to manually send a payout directly to a bank account via Flutterwave.
+ *       <br><br>
+ *       🟡 Use this only if automatic distribution in `/distribute-payment` fails due to:
+ *       - Flutterwave downtime
+ *       - Missing host/winner bank info
+ *       - Partial payout failure
+*     tags: [Payment]
+ *     security: [] # No authentication required
  *     requestBody:
  *       required: true
  *       content:
@@ -388,16 +440,16 @@ router.post(
  *                 example: "044"
  *               accountNumber:
  *                 type: string
- *                 description: Recipient bank account number
+ *                 description: Recipient's 10-digit account number
  *                 example: "0123456789"
  *               amount:
  *                 type: number
- *                 description: Amount to send
+ *                 description: Amount to transfer (in Naira)
  *                 example: 5000
  *               narration:
  *                 type: string
- *                 description: Payment description
- *                 example: "Tournament payout"
+ *                 description: Description of the transaction
+ *                 example: "Tournament host manual payout"
  *     responses:
  *       200:
  *         description: Payout initiated successfully
@@ -415,19 +467,48 @@ router.post(
  *                 data:
  *                   type: object
  *                   description: Flutterwave API response
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       example: "success"
+ *                     message:
+ *                       type: string
+ *                       example: "Transfer Queued Successfully"
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: number
+ *                           example: 123456789
+ *                         reference:
+ *                           type: string
+ *                           example: "manual-172853945-82"
+ *                         amount:
+ *                           type: number
+ *                           example: 5000
+ *                         currency:
+ *                           type: string
+ *                           example: "NGN"
  *       400:
- *         description: Invalid request data
+ *         description: Invalid or missing input data
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "accountBank, accountNumber, and amount are required"
  *       500:
  *         description: Payout transfer failed
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Payout transfer failed"
  */
-router.post(
-  '/send',    
-  transaction.sendPayout
-);
+router.post("/send", transaction.sendPayout);
 
 /**
  * @swagger
- * /api/v1/payments/webhook:
+ * /api/v1/webhook:
  *   post:
  *     summary: Handle Flutterwave webhook events
  *     description: Receives and processes webhook events from Flutterwave (payments and transfers).
@@ -578,7 +659,7 @@ router.post("/company-bank/register", transaction.registerCompanyBank);
 
 /**
  * @swagger
- * /api/v1/transactions/{tournamentId}:
+ * /api/v1/tournament/{tournamentId}:
  *   get:
  *     summary: Get all transactions for a tournament
 *     tags: [Payment]

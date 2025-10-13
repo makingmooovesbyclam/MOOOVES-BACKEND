@@ -1,4 +1,4 @@
-const userModel = require('../models/user');
+const userModel = require('../models/user.js');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../helper/nodemailer');
@@ -310,5 +310,73 @@ exports.grantHostAccess = async (req, res) => {
     res.json({ message: 'Host access granted', user });
   } catch (err) {
     res.status(500).json({ error: 'Failed to grant host access', details: err.message });
+  }
+};
+
+
+
+
+const Host = require('../models/host.js');
+// const User = require('../models/user');/
+
+// 🔹 POST /api/v1/auth/forgot
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ found: false, message: "Email is required" });
+    }
+
+    // Try to find in Host and User collections
+    let account = await Host.findOne({ email });
+    let accountType = "host";
+
+    if (!account) {
+      account = await userModel.findOne({ email });
+      accountType = "user";
+    }
+
+    if (!account) {
+      return res.status(404).json({ found: false });
+    }
+
+    // Response includes account id and type (optional but useful for reset)
+    return res.status(200).json({
+      found: true,
+      id: account._id,
+      accountType
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ found: false, message: "Server error" });
+  }
+};
+
+// 🔹 POST /api/v1/auth/forgot/reset
+exports.resetPassword = async (req, res) => {
+  try {
+    const { id, newPassword } = req.body;
+    if (!id || !newPassword) {
+      return res.status(400).json({ success: false, message: "Missing fields" });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    // Try finding in Host collection first
+    let updatedAccount = await Host.findByIdAndUpdate(id, { password: hashed }, { new: true });
+
+    // If not found, try User collection
+    if (!updatedAccount) {
+      updatedAccount = await userModel.findByIdAndUpdate(id, { password: hashed }, { new: true });
+    }
+
+    if (!updatedAccount) {
+      return res.status(404).json({ success: false, message: "Account not found" });
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
