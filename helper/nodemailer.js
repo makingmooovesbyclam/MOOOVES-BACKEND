@@ -15,7 +15,7 @@ const transporter = await nodeMailer.createTransport({
   }
 });
 const mailOption = {
-    subject:options.subject, text:options.text, from: `"urigwe somto"<${process.env.APP_USERNAME}>`, to: options.email, html:options.html
+    subject:options.subject, text:options.text, from: `"MOOOVES PLATFORM"<${process.env.APP_USERNAME}>`, to: options.email, html:options.html
 }
 await transporter.sendMail(mailOption)
 
