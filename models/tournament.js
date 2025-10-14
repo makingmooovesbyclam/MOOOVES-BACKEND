@@ -69,7 +69,7 @@ createdByModel: {
   }
 });
 
-module.exports = mongoose.model('Tournament', tournamentSchema);
+// module.exports = mongoose.model('Tournament', tournamentSchema);
 
 
 const Tournament = mongoose.model('Tournament', tournamentSchema)
