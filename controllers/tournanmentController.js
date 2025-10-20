@@ -11,87 +11,100 @@ const crypto = require('crypto');
 
 
 
-exports.createTournament = async (req, res) => {
+
+const sendEmail = require('../helper/nodemailer');
+
+
+
+// Reschedule endpoint (creator)
+exports.rescheduleTournament = async (req, res) => {
   try {
-    const { organizerId, name, maxPlayers,entryFee } = req.body;
+    const { id } = req.params;
+    const { newStartTime } = req.body;
+    const userId = req.user.id;
 
-    if (!organizerId || !name) {
-      return res.status(400).json({ error: "Host and name are required" });
-    }
-    if(maxPlayers > 50){
-      return res.status(400).json({error:"maximum player is 50"})
-    }
-// 🔍 Step 1: Try to find in User collection
-    let users = await User.findById(organizerId);
-    let host = null;
+    const tournament = await Tournament.findById(id);
+    if (!tournament) return res.status(404).json({ message: 'Tournament not found' });
+    if (String(tournament.createdBy) !== String(userId)) return res.status(403).json({ message: 'Only creator can reschedule' });
+    if (tournament.status !== 'scheduled') return res.status(400).json({ message: 'Only scheduled tournaments can be rescheduled' });
 
-    if (!users) {
-      // 🔍 Step 2: if not found in User, check Host collection
-      host = await Host.findById(organizerId);
-      if (!host) {
-        return res.status(404).json({ error: "Organizer not found" });
-      }
-    }
-
-    //  Step 3: If it's a User, check hosting eligibility
-    if (user) {
-      if (!user.canHostTournament) {
-        if (user.tournamentsJoinedCount < 2) {
-          return res.status(403).json({
-            error: "You must join at least 2 tournaments before hosting one"
-          });
-        }
-        //  mark them as host since condition is satisfied
-        user.canHostTournament = true;
-        await user.save();
-      }
-    }
-
-
-    const inviteCode = crypto.randomBytes(4).toString('hex');
-// const bluetoothToken = Math.random().toString(36).substring(2,10);
-  // 🔍 Step 1: Check if it's a User or Host
-let creatorModel = null;
-
-let user = await User.findById(organizerId);
-if (user) {
-  creatorModel = 'User';
-} else {
-  let host = await Host.findById(organizerId);
-  if (host) {
-    creatorModel = 'Host';
-  } else {
-    return res.status(404).json({ error: "Organizer not found" });
-  }
-}
-
-// 🔍 Step 2: Create tournament with dynamic createdByModel
-const tournament = new Tournament({
-  name,
-  createdBy: organizerId,
-  createdByModel: creatorModel,   // 👈 key part
-  participants: [],
-  maxParticipants: maxPlayers,
-  entryFee,
-  prizePool: 0,
-  inviteCode,
-  status: 'pending'
-});
-
-
+    const newDate = new Date(newStartTime);
+    if (isNaN(newDate.getTime()) || newDate < new Date()) return res.status(400).json({ message: 'Invalid new start time' })
+      tournament.startTime = newDate;
     await tournament.save();
-  const inviteLink = `${process.env.BASE_URL}/api/v1/tournaments/join/${tournament.inviteCode}`
-    res.status(201).json({
-      message: "Tournament created successfully",
-      // tournamentId: tournament._id,
-      tournament,
-      inviteLink,
-    });
+
+    // notify participants about reschedule (optional)
+    // for each participant, fetch email and send a brief email/whatsapp
+
+    return res.status(200).json({ message: 'Tournament rescheduled', startTime: tournament.startTime });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[rescheduleTournament error]', err);
+    return res.status(500).json({ message: err.message });
   }
 };
+exports.createTournament = async (req, res) => {
+  try {
+    const { organizerId, name, maxPlayers, entryFee, startTime } = req.body;
 
+    if (!organizerId || !name) return res.status(400).json({ error: "Host and name are required" });
+    if (maxPlayers && maxPlayers > 50) return res.status(400).json({ error: "maximum player is 50" });
+    if (!startTime) return res.status(400).json({ error: "startTime is required (UTC ISO string)" });
+
+    const startDate = new Date(startTime);
+    if (isNaN(startDate.getTime()) || startDate < new Date()) {
+      return res.status(400).json({ error: "Invalid or past start time" });
+    }
+
+    let user = await User.findById(organizerId);
+    let host = null;
+    if (!user) {
+      host = await Host.findById(organizerId);
+      if (!host) return res.status(404).json({ error: "Organizer not found" });
+    }
+
+    // If user must earn host rights:
+    if (user && !user.canHostTournament) {
+      if (user.tournamentsJoinedCount < 2) {
+        return res.status(403).json({ error: "You must join at least 2 tournaments before hosting one" });
+      }
+      user.canHostTournament = true;
+      await user.save();
+    }
+
+    const inviteCode = crypto.randomBytes(4).toString('hex');
+    const creatorModel = user ? 'User' : 'Host';
+
+    const tournament = new Tournament({
+      name,
+      createdBy: organizerId,
+      createdByModel: creatorModel,
+      participants: [],
+      maxParticipants: maxPlayers || 16,
+      entryFee: entryFee || 0,
+      prizePool: 0,
+      inviteCode,
+      status: 'scheduled',
+      startTime: startDate,
+      autoStartEnabled: true
+    });
+
+    await tournament.save();
+
+    // Optional email to creator
+    const firstName = (user?.fullName || host?.fullName || '').split(' ')[0] || 'Organizer';
+    await sendEmail({
+      email: (user?.email || host?.email),
+      subject: 'Tournament Scheduled',
+      html: `<p>Hi ${firstName}, your tournament <b>${tournament.name}</b> is scheduled for <b>${startDate.toUTCString()}</b>.</p>`
+    });
+
+    const inviteLink = `${process.env.BASE_URL}/api/v1/tournaments/join/${tournament.inviteCode}`;
+    return res.status(201).json({ message: "Tournament created successfully", tournament, inviteLink });
+  } catch (err) {
+    console.error('[createTournament error]', err);
+    return res.status(500).json({ error: err.message });
+  }
+};
 
 // utils/pairing.js
 const pairPlayers = (players) => {
@@ -107,90 +120,177 @@ const pairPlayers = (players) => {
   return pairs;
 };
 
+// CORE START LOGIC (exported so auto-start and manual start reuse)
+// NOTE: Accepts either tournament document OR tournament id (we expect doc here)
+const EmailLog = require("../models/EmailLog");
+const { sendmail } = require("../utils/emailService");
+
+
+// -------------------- START TOURNAMENT LOGIC --------------------
+// -------------------- START TOURNAMENT LOGIC --------------------
+// -------------------- START TOURNAMENT LOGIC --------------------
+exports.startTournamentLogic = async function startTournamentLogic(tournamentDoc) {
+  let tournament = tournamentDoc;
+
+  // ✅ If only ID was passed, fetch full tournament document
+  if (!tournament._id) {
+    tournament = await Tournament.findById(tournamentDoc).populate("participants createdBy");
+    if (!tournament) throw new Error("Tournament not found");
+  }
+
+  // ✅ Validate participant limits
+  const participantCount = tournament.participants.length;
+  if (participantCount < tournament.minParticipants) {
+    throw new Error(`At least ${tournament.minParticipants} participants required to start.`);
+  }
+  if (participantCount > tournament.maxParticipants) {
+    throw new Error(`Maximum ${tournament.maxParticipants} participants allowed.`);
+  }
+
+  // ✅ Calculate prize pool dynamically
+  tournament.prizePool = (tournament.entryFee || 0) * participantCount;
+
+  // ✅ Pair players randomly
+  const pairs = pairPlayers(tournament.participants);
+  const matchIds = [];
+
+  // ✅ Create matches for Round 1
+  for (const [p1, p2] of pairs) {
+    const match = new Match({
+      player1: p1,
+      player2: p2 || p1, // if odd number, assign p1 again to mark auto-win
+      status: p2 ? "waiting" : "completed",
+      winner: p2 ? [] : [p1],
+      tournamentId: tournament._id,
+      waitingStartedAt: p2 ? new Date() : null,
+      joinedPlayers: p2 ? [] : [p1],
+    });
+
+    await match.save();
+    matchIds.push(match._id);
+  }
+
+  // ✅ Update tournament state
+  tournament.rounds.push({ roundNumber: 1, matches: matchIds });
+  tournament.status = "ongoing";
+  await tournament.save();
+
+  // ✅ Notify all participants (Users)
+  for (const participantId of tournament.participants) {
+    const player = await User.findById(participantId);
+    if (!player?.email) continue;
+
+    const subject = `🎮 ${tournament.name} has started!`;
+    const message = `
+      Hi ${player.fullName || "Player"},<br><br>
+      Your tournament <strong>${tournament.name}</strong> has officially started!<br>
+      Check your MOOOVES dashboard to see your first match pairing.<br><br>
+      Good luck and have fun!<br><br>
+      — The MOOOVES Team
+    `;
+
+    const result = await sendmail(player.email, subject, message);
+
+    await EmailLog.create({
+      userId: player._id,
+      tournamentId: tournament._id,
+      event: "tournament_start",
+      recipient: player.email,
+      subject,
+      body: message,
+      status: result?.success ? "success" : "failed",
+      error: result?.error || null,
+    });
+  }
+
+  // ✅ Notify the creator (Host or User)
+  const creatorModel = tournament.createdByModel === "Host" ? Host : User;
+  const creator = await creatorModel.findById(tournament.createdBy);
+
+  if (creator?.email) {
+    const subject = `🏁 Your tournament "${tournament.name}" has started!`;
+    const message = `
+      Hi ${creator.fullName || creator.username || "Organizer"},<br><br>
+      Your tournament <strong>${tournament.name}</strong> has officially started and all participants have been notified.<br>
+      You can now monitor progress from your dashboard.<br><br>
+      — The MOOOVES Team
+    `;
+
+    const result = await sendEmail(creator.email, subject, message);
+
+    await EmailLog.create({
+      [tournament.createdByModel === "Host" ? "hostId" : "userId"]: creator._id,
+      tournamentId: tournament._id,
+      event: "tournament_start",
+      recipient: creator.email,
+      subject,
+      body: message,
+      status: result?.success ? "success" : "failed",
+      error: result?.error || null,
+  })
+  }
+
+  return { matchIds, prizePool: tournament.prizePool };
+};
+
+// -------------------- MANUAL START ENDPOINT --------------------
 exports.startTournament = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id; // assuming middleware sets this
-    const tournament = await Tournament.findById(id).populate('participants');
+    const userId = req.user.id;
 
-    if (!tournament) return res.status(404).json({ message: 'Tournament not found' });
-    if (tournament.status !== 'pending') {
-      return res.status(400).json({ message: 'Tournament already started or completed' });
-    }
-    // ✅ Ensure only the creator (Host or User) can start
-if (String(tournament.createdBy) !== String(userId)) {
-  return res.status(403).json({ message: 'Only the creator can start this tournament' });
-}
+    const tournament = await Tournament.findById(id).populate("participants");
 
-// // ✅ Check payment depending on creator type
-// let requiredRole = tournament.createdByModel === 'Host' ? 'host' : 'user';
-
-// const creatorPayment = await Transaction.findOne({
-//   user: userId,
-//   tournament: id,`
-//   role: requiredRole,
-//   status: 'success',
-//   amount: 1000   // or make this dynamic if fee differs
-// });
-
-// if (!creatorPayment) {
-//   return res.status(400).json({ 
-//     message: `${tournament.createdByModel} must pay ₦1000 fee before starting tournament `
-//   });
-// }
-   
-    //
-    if (tournament.participants.length < tournament.minParticipants) {
-      return res.status(400).json({
-        message: `At least ${tournament.minParticipants} participants required to start.`
-      });
-    }
-    if (tournament.participants.length > tournament.maxParticipants) {
-      return res.status(400).json({
-        message:` Maximum ${tournament.maxParticipants} participants allowed.`
-      });
+    if (!tournament) {
+      return res.status(404).json({ message: "Tournament not found" });
     }
 
-    // lock prize pool
-    tournament.prizePool = tournament.entryFee * tournament.participants.length;
-
-    // ✅ pair participants (1v1 matches only)
-    const pairs = pairPlayers(tournament.participants);
-    const matchIds = [];
-
-    for (const [player1, player2] of pairs) {
-      const match = new Match({
-        players: player2 ? [player1, player2] : [player1], // bye if no opponent
-        status: player2 ? 'ongoing' : 'completed',
-        winner: player2 ? null : player1, // auto-advance if bye
-        // matchRoomId: null
-      });
-      await match.save();
-      matchIds.push(match._id);
+    if (String(tournament.createdBy) !== String(userId)) {
+      return res.status(403).json({ message: "Only the creator can start this tournament" });
     }
 
-    tournament.rounds.push({ roundNumber: 1, matches: matchIds });
-    tournament.status = 'ongoing';
-    await tournament.save();
+    if (!["scheduled", "pending"].includes(tournament.status)) {
+      return res.status(400).json({ message: "Tournament already started or completed" });
+    }
+
+    try {
+      await exports.startTournamentLogic(tournament);
+    } catch (err) {
+      // Allow host override if ?force=true
+      if (req.query.force === "true") {
+        tournament.minParticipants = 1;
+        await exports.startTournamentLogic(tournament);
+      } else {
+        throw err;
+      }
+    }
 
     return res.status(200).json({
-      message: 'Tournament started',
-      matches: matchIds,
-      prizePool: tournament.prizePool
+      message: "Tournament started successfully",
+      tournamentId: tournament._id,
     });
-  } catch (error) {
-    console.error('Start tournament error:', error);
-    res.status(500).json({ message: 'Internal error: ' + error.message });
+  } catch (err) {
+    console.error("[startTournament error]", err);
+    return res.status(500).json({ message: err.message });
   }
 };
+
+
+
+
+// join by link
 exports.joinTournamentWithLink = async (req, res) => {
   try {
     const { inviteCode } = req.params;
     const { userId } = req.body;
 
     const tournament = await Tournament.findOne({ inviteCode });
-
     if (!tournament) return res.status(404).json({ error: "Invalid invite code" });
+
+    // disallow joining after scheduled startTime
+    if (tournament.startTime && tournament.startTime <= new Date()) {
+      return res.status(400).json({ error: "Joining closed: tournament has already started or the start time has passed" });
+    }
 
     if (tournament.participants.includes(userId)) {
       return res.status(400).json({ error: "User already joined" });
@@ -199,30 +299,31 @@ exports.joinTournamentWithLink = async (req, res) => {
     if (tournament.participants.length >= tournament.maxParticipants) {
       return res.status(400).json({ error: "Tournament is full" });
     }
-// 4. Check payment (must have a successful ₦2000 player transaction for this tournament)
+
+    // payment check: ensure player paid entryFee for this tournament
     const payment = await Transaction.findOne({
       user: userId,
       tournament: tournament._id,
       role: 'player',
-      amount,
-      status: 'success'
+      status: 'success',
+      amount: tournament.entryFee
     });
 
     if (!payment) {
-      return res.status(400).json({ error: "User must pay ₦2000 before joining this tournament" });
+      return res.status(400).json({ error: `User must pay ₦${tournament.entryFee} before joining this tournament `});
     }
 
-    //add user
     tournament.participants.push(userId);
     await tournament.save();
-// 6. Update user's joined count
+
     await User.findByIdAndUpdate(userId, { $inc: { tournamentsJoinedCount: 1 } });
-    res.json({ message: "Joined successfully", tournamentId: tournament._id,name:tournament.name,particionts:tournament.participants });
+
+    return res.json({ message: "Joined successfully", tournamentId: tournament._id, name: tournament.name, participants: tournament.participants });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[joinTournamentWithLink error]', err);
+    return res.status(500).json({ error: err.message });
   }
 };
-
 // controllers/tournamentController.js
  
 

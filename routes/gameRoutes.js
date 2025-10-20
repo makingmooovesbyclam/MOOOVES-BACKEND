@@ -3,7 +3,7 @@ const router = express.Router();
 const { makeMove ,createMatch} = require('../controllers/gameController');
 
 const matchController = require('../controllers/gameController');
-
+const authMiddleware  = require('../middlewares/authMiddleware')
 
 
 /**
@@ -208,6 +208,84 @@ router.post('/:matchId/submit-resultoffline', matchController.submitOfflineResul
  *         description: Internal server error
  */
 router.post('/move', makeMove);
+
+/**
+ * @swagger
+ * /api/v1/matches/{matchId}/join:
+ *   post:
+ *     summary: Join or start a match in a tournament
+ *     description: |
+ *       This endpoint allows an authenticated player to join a specific match in a tournament.  
+ *       <br><br>
+ *       Flow Overview:  
+ *       - When a player joins, they are added to the joinedPlayers array in the match.  
+ *       - If both players have joined, the match automatically transitions to "ongoing" status and starts immediately.  
+ *       - If only one player joins and the opponent does not join within a 2-minute grace period, the player who joined first wins automatically ("auto-win").  
+ *       - Automatic email notifications are sent to both players (and can be extended to hosts).  
+ *       - All notifications are logged to the EmailLog collection for transparency.  
+ *       
+ *       Notifications include:  
+ *       - 🎉 Auto-win notification (to the winner)  
+ *       - 😔 Forfeit notification (to the loser)
+ *       
+ *       This system ensures fair play and tournament automation.
+ *       
+ *       Authorization:  
+ *       Requires a valid JWT token (Bearer Auth).
+ *     tags:
+ *       - Matches
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: matchId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: MongoDB ObjectId of the match to join.
+ *     responses:
+ *       200:
+ *         description: Successfully joined or completed the match logic.
+ *         content:
+ *           application/json:
+ *             examples:
+ *               bothJoined:
+ *                 summary: Both players joined, match started
+ *                 value:
+ *                   message: "Both players joined. Match started!"
+ *                   matchId: "670f52e81df21e2c4b6a120c"
+ *                   status: "ongoing"
+ *               autoWin:
+ *                 summary: Opponent didn’t show up — auto-win applied
+ *                 value:
+ *                   message: "Opponent didn’t show up. Auto-win applied."
+ *                   winner: "670f52d91df21e2c4b6a11ff"
+ *                   matchId: "670f52e81df21e2c4b6a120c"
+ *                   status: "completed"
+ *       202:
+ *         description: Waiting for opponent to join.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Waiting for opponent to join..."
+ *               matchId: "670f52e81df21e2c4b6a120c"
+ *               joinedPlayers:
+ *                 - "670f52d91df21e2c4b6a11ff"
+ *               status: "pending"
+ *       404:
+ *         description: Match not found.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Match not found"
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Internal server error"
+ */
+router.post('/matches/:matchId/join', authMiddleware, matchController.joinMatch);
 
 /**
  * @swagger

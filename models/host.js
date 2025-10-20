@@ -25,7 +25,10 @@ const hostSchema = new mongoose.Schema({
     bankCode: String,       // e.g. "058" for GTBank
     recipientCode: String   // Returned by Paystack when you create a transfer recipient
   },
-   approvedByAdmin:{type:Boolean,default:true}
+   approvedByAdmin:{type:Boolean,default:true},
+
+   otpCode: { type: String },
+otpExpires: { type: Date },
    
 }, { timestamps: true });
 const Host = mongoose.model('host', hostSchema)

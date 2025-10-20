@@ -30,9 +30,9 @@ passport.use('google-host',new GoogleStrategy({
                               subject: 'Welcome to the MOOOVES Platform!',
                               html: signup( firstName)
                             };
-                        
+                  
                             // Send email
-                            await sendEmail(mailDetails);
+                    await sendEmail(mailDetails);
     }
     return cb(null,user);
   } catch (error) {

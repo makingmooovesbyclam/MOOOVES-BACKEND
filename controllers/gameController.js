@@ -44,6 +44,114 @@ exports.createMatch = async (req, res) => {
     return res.status(500).json({ message: 'Internal server error: ' + error.message });
   }
 };
+
+
+// controllers/match.controller.js
+``
+
+const { sendEmail } = require("../utils/emailService");
+const EmailLog = require("../models/EmailLog");
+
+exports.joinMatch = async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const userId = req.user.id;
+
+    const match = await Match.findById(matchId);
+    if (!match) return res.status(404).json({ message: 'Match not found' });
+
+    // Add player to joinedPlayers if not already joined
+    if (!match.joinedPlayers.map(String).includes(String(userId))) {
+      match.joinedPlayers.push(userId);
+      await match.save();
+    }
+
+    // ✅ If both players joined → start the match
+    if (match.joinedPlayers.length >= 2) {
+      match.status = 'ongoing';
+      match.startedAt = new Date();
+      await match.save();
+      return res.json({
+        message: 'Both players joined. Match started!',
+        matchId: match._id,
+        status: match.status,
+      });
+    }
+
+    // ✅ If only one joined and the other hasn’t within allowed time
+    const joinDeadline = new Date(match.createdAt.getTime() + 2 * 60 * 1000); // 2-minute grace
+    if (new Date() > joinDeadline && match.joinedPlayers.length === 1) {
+      const [winnerId] = match.joinedPlayers;
+      const loserId =
+        String(match.player1) === String(winnerId)
+          ? match.player2
+          : match.player1;
+
+      match.status = 'completed';
+      match.winner = [winnerId];
+      await match.save();
+
+      // Notify via email
+      const winner = await User.findById(winnerId);
+      const loser = await User.findById(loserId);
+      const tournament = await Tournament.findOne({ "rounds.matches": match._id });
+
+      if (winner?.email) {
+        const winSubject = "🎉 You advanced automatically!";
+        const winMsg = `Congrats ${winner.fullName || "Player"}!<br>
+        You have automatically advanced to the next round in "<strong>${tournament?.name || "Tournament"}</strong>"
+        because your opponent didn’t show up.`;
+
+        const resWin = await sendEmail(winner.email, winSubject, winMsg);
+        await EmailLog.create({
+          userId: winner._id,
+          tournamentId: tournament?._id,
+          event: "auto_win",
+          recipient: winner.email,
+          subject: winSubject,
+          status: resWin.success ? "success" : "failed",
+          error: resWin.error || null,
+        });
+      }
+
+      if (loser?.email) {
+        const loseSubject = "😔 You forfeited your match";
+        const loseMsg = `Hi ${loser.fullName || "Player"},<br>
+        You forfeited your match in "<strong>${tournament?.name || "Tournament"}</strong>" due to no attendance.<br>
+        Better luck next time!`;
+
+        const resLose = await sendEmail(loser.email, loseSubject, loseMsg);
+        await EmailLog.create({
+          userId: loser._id,
+          tournamentId: tournament?._id,
+          event: "forfeit",
+          recipient: loser.email,
+          subject: loseSubject,
+          status: resLose.success ? "success" : "failed",
+          error: resLose.error || null,
+        });
+      }
+
+      return res.status(200).json({
+        message: "Opponent didn’t show up. Auto-win applied.",
+        winner: winnerId,
+        matchId: match._id,
+        status: "completed",
+      });
+    }
+
+    return res.status(202).json({
+      message: 'Waiting for opponent to join...',
+      matchId: match._id,
+      joinedPlayers: match.joinedPlayers,
+      status: match.status,
+    });
+
+  } catch (err) {
+    console.error('[joinMatch error]', err);
+    return res.status(500).json({ message: err.message });
+  }
+};
 // helper: check for 5-in-a-row
 // ✅ Utility function to check 5 in a row
 function checkFive(board, row, col, symbol) {
@@ -107,6 +215,49 @@ function calculateScore(board, symbol) {
 
   return score;
 }
+
+exports.submitOfflineResult = async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { winnerId } = req.body;
+
+    // 1️⃣ Find match
+    const match = await Match.findById(matchId);
+    if (!match) {
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    if (match.status === "completed") {
+      return res.status(400).json({ message: "Match already completed" });
+    }
+
+    // 2️⃣ Validate winner is one of the players
+    if (![match.player1?.toString(), match.player2?.toString()].includes(winnerId)) {
+      return res.status(400).json({ message: "Invalid winner: must be one of the players" });
+    }
+
+    // 3️⃣ Mark result
+    match.status = "completed";
+    match.winner = [winnerId];   // ✅ only store winner
+    match.first = winnerId;      // ✅ optional, set "first" for consistency
+    match.second =
+      winnerId === match.player1?.toString()
+        ? match.player2?.toString()
+        : match.player1?.toString();
+    match.third = null;          // ❌ not used in 1v1
+    match.completedAt = new Date();
+
+    await match.save();
+
+    return res.status(200).json({
+      message: "1v1 match result submitted successfully",
+      match,
+    });
+  } catch (error) {
+    console.error("Offline match result error:", error);
+    return res.status(500).json({ message: "Internal server error: " + error.message });
+  }
+};
 
 exports.makeMove = async (req, res) => {
   try {
@@ -206,48 +357,7 @@ exports.makeMove = async (req, res) => {
   }
 };
 
-exports.submitOfflineResult = async (req, res) => {
-  try {
-    const { matchId } = req.params;
-    const { winnerId } = req.body;
 
-    // 1️⃣ Find match
-    const match = await Match.findById(matchId);
-    if (!match) {
-      return res.status(404).json({ message: "Match not found" });
-    }
-
-    if (match.status === "completed") {
-      return res.status(400).json({ message: "Match already completed" });
-    }
-
-    // 2️⃣ Validate winner is one of the players
-    if (![match.player1?.toString(), match.player2?.toString()].includes(winnerId)) {
-      return res.status(400).json({ message: "Invalid winner: must be one of the players" });
-    }
-
-    // 3️⃣ Mark result
-    match.status = "completed";
-    match.winner = [winnerId];   // ✅ only store winner
-    match.first = winnerId;      // ✅ optional, set "first" for consistency
-    match.second =
-      winnerId === match.player1?.toString()
-        ? match.player2?.toString()
-        : match.player1?.toString();
-    match.third = null;          // ❌ not used in 1v1
-    match.completedAt = new Date();
-
-    await match.save();
-
-    return res.status(200).json({
-      message: "1v1 match result submitted successfully",
-      match,
-    });
-  } catch (error) {
-    console.error("Offline match result error:", error);
-    return res.status(500).json({ message: "Internal server error: " + error.message });
-  }
-};
 
 const Tournament = require('../models/tournament');
 const { pairPlayers } = require('../utils/pairing');
@@ -327,7 +437,18 @@ exports.submitResult = async (req, res) => {
     if (!tournament) {
       return res.status(400).json({ message: "This match is not part of a tournament" });
     }
+    // ✅ Ensure tournament is ongoing
+    if (tournament.status === "scheduled" && now >= tournament.startTime) {
+      tournament.status = "ongoing";
+      await tournament.save();
+    } else if (tournament.status !== "ongoing") {
+      return res.status(400).json({ message: "Tournament not started yet" });
+    }
 
+    // ✅ Mark match complete
+    match.status = "completed";
+    match.winner = winnerId ? [winnerId] : [];
+    await match.save();
     // 5️⃣ Check if current round finished
     const currentRound = tournament.rounds.find(r => r.roundNumber === tournament.currentRound);
     const allMatches = await Match.find({ _id: { $in: currentRound.matches } });

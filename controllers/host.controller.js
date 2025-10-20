@@ -23,8 +23,7 @@ exports.createHost = async (req, res) => {
 const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
         if (userExists) {
             return res.status(400).json({
-                message:` Email: ${email} already in use as User Please kindly 
-                make a change of Email`
+                message:` Email: ${email} already in use as User Please kindly make a change of Email`
             });
         }
     // Check if host with email already exists
@@ -55,7 +54,7 @@ const userExists = await userModel.findOne({ email: email.toLowerCase().trim() }
     await host.save();
 
     // // Generate verification token
-    // const token = jwt.sign({ hostId: host._id }, process.env.SECRET, { expiresIn: '10m' });
+     const token = jwt.sign({ hostId: host._id }, process.env.SECRET, { expiresIn: '10m' });
 
     // // Construct verification link
     // const link = `${req.protocol}://${req.get('host')}/verify-user/${token}`;
@@ -74,7 +73,8 @@ const userExists = await userModel.findOne({ email: email.toLowerCase().trim() }
     // Send success response
     res.status(201).json({
       message: 'Host created successfully.',
-      host
+      host,
+     token
     });
 
   } catch (err) {

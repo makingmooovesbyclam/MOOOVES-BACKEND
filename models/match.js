@@ -17,9 +17,10 @@ const matchSchema = new mongoose.Schema({
   player2: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     
   
+  // keep original statuses but extend with waiting/forfeited
   status: {
     type: String,
-    enum: ['pending', 'ongoing', 'completed'],
+    enum: ['pending', 'waiting', 'ongoing', 'completed', 'forfeited'],
     default: 'pending'
   },
 
@@ -37,7 +38,10 @@ const matchSchema = new mongoose.Schema({
     movesMade: { type: Number, default: 0 },
     currentTurn: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   },
-
+// WAITING ROOM FIELDS
+  waitingStartedAt: { type: Date, default: null },     // when waiting window began
+  joinedPlayers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // players who joined the match
+  
   startedAt: { type: Date, default: Date.now },
   endsAt: { type: Date },
 

@@ -1,8 +1,11 @@
-const { register, verifyUser, login,logoutUser,getUsers,getoneUser,forgotPassword,resetPassword,updateUser,deleteUser,grantHostAccess,requestHostAccess } = require('../controllers/usercontroller');
+
+const express = require('express');
+const router = express.Router();
+const { registeruser, verifyUser, login,logoutUser,verifyOtp,getUsers,getoneUser,forgotPassword,resetPassword,updateUser,deleteUser,grantHostAccess,requestHostAccess } = require('../controllers/usercontroller');
 const {registers} = require('../middlewares/validator')
 const jwt = require('jsonwebtoken');
 const passport = require('passport')
-const router = require('express').Router();
+
 
 
 
@@ -112,13 +115,13 @@ const router = require('express').Router();
  *             example:
  *               message: "Internal Server Error"
  */
-router.post('/users', registers, register);
+router.post('/users', registers, registeruser);
 
 router.post('/req', requestHostAccess);
 router.post('/grant', grantHostAccess);
 
 // router.get('/verify-user/:token', verifyUser);
-
+   
 /**
  * @swagger
  * /api/v1/login:
@@ -666,8 +669,76 @@ router.post('/grant-host-access', grantHostAccess);
  *               success: false
  *               message: "Server error"
  */
+/**
+ * @swagger
+ * /api/v1/verify:
+ *   post:
+ *     summary: Verify account OTP
+ *     description: |
+ *       This endpoint verifies the one-time password (OTP) sent to a user's registered email during sign-up or password reset.
+ *       If the OTP is valid and unexpired, the account is marked as verified.
+ *     tags:
+ *       - Auth
+ *     security: []  # No authentication required
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: Registered user email to verify.
+ *                 example: "moooves455@gmail.com"
+ *               otp:
+ *                 type: string
+ *                 description: 6-digit OTP sent to the user's email.
+ *                 example: "123674"
+ *     responses:
+ *       200:
+ *         description: OTP verified successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: "Account verified successfully"
+ *       400:
+ *         description: Invalid or expired OTP.
+ *         content:
+ *           application/json:
+ *             examples:
+ *               InvalidOTP:
+ *                 summary: Wrong code
+ *                 value:
+ *                   success: false
+ *                   message: "Invalid OTP"
+ *               ExpiredOTP:
+ *                 summary: OTP expired
+ *                 value:
+ *                   success: false
+ *                   message: "OTP expired"
+ *       404:
+ *         description: Account not found.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Account not found"
+ *       500:
+ *         description: Internal server error.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Server error"
+ */
 // Forgot and Reset endpoints
 router.post('/forgot', forgotPassword);
 router.post('/forgot/reset', resetPassword);
+router.post('/verify', verifyOtp);
 
 module.exports = router

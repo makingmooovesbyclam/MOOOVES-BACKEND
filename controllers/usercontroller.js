@@ -1,10 +1,11 @@
 const userModel = require('../models/user.js');
+const Host = require('../models/host.js');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../helper/nodemailer');
 const signup = require('../helper/signup')
-const Host = require('../models/host.js');
-exports.register = async (req, res) => {
+
+exports.registeruser = async (req, res) => {
   try {
     const { fullName, email, password, repeatPassword } = req.body;
 
@@ -51,6 +52,9 @@ exports.register = async (req, res) => {
 
     await user.save();
 
+
+
+     const token = jwt.sign({ hostId: user._id }, process.env.SECRET, { expiresIn: '10m' });
     const firstName = fullName.trim().split(" ")[0];
 
     // ✅ Fixed: use user.email instead of host.email
@@ -65,6 +69,7 @@ exports.register = async (req, res) => {
     return res.status(201).json({
       message: "User registered successfully.",
       data: user,
+      token
     });
   } catch (error) {
     console.error("❌ Register error:", error.message);
@@ -316,14 +321,16 @@ exports.grantHostAccess = async (req, res) => {
 // const User = require('../models/user');/
 
 // 🔹 POST /api/v1/auth/forgot
+
+const { generateOtp } = require("../utils/generateOtp"); // small util
+
+
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) {
+    if (!email)
       return res.status(400).json({ found: false, message: "Email is required" });
-    }
 
-    // Try to find in Host and User collections
     let account = await Host.findOne({ email });
     let accountType = "host";
 
@@ -332,21 +339,78 @@ exports.forgotPassword = async (req, res) => {
       accountType = "user";
     }
 
-    if (!account) {
-      return res.status(404).json({ found: false });
-    }
+    if (!account) return res.status(404).json({ found: false });
 
-    // Response includes account id and type (optional but useful for reset)
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Save to DB
+    account.otpCode = otp;
+    account.otpExpires = Date.now() + 10 * 60 * 1000; // 10 mins expiry
+    await account.save();
+
+    // Construct HTML email (styled like your screenshot)
+    const html = `
+      <div style="background:#000;padding:30px;text-align:center;font-family:Arial,Helvetica,sans-serif;">
+        <div style="background:#32cd32;border-radius:8px;padding:40px 20px;">
+          <h1 style="color:#000;font-size:28px;margin-bottom:10px;">Welcome to MOOOVES!</h1>
+          <p style="color:#111;font-size:16px;">Hello ${account.fullName.split(" ")[0]},</p>
+          <p style="color:#111;font-size:16px;margin-top:10px;">Here’s your OTP code to reset your password:</p>
+          <h2 style="font-size:40px;letter-spacing:5px;color:#000;margin:20px 0;">${otp}</h2>
+          <p style="color:#111;">This code will expire in <b>10 minutes</b>.</p>
+        </div>
+        <div style="margin-top:40px;">
+          <p style="color:#999;">© 2025 MOOOVES Platform. All rights reserved.</p>
+        </div>
+      </div>
+    `;
+
+    // Send the email
+    await sendEmail({
+      email: account.email,
+      subject: "Your MOOOVES OTP Code",
+      html,
+    });
+
     return res.status(200).json({
       found: true,
+      message: "OTP sent successfully",
       id: account._id,
-      accountType
+      accountType,
     });
   } catch (error) {
     console.error("Forgot password error:", error);
     res.status(500).json({ found: false, message: "Server error" });
   }
 };
+
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    let account = await Host.findOne({ email });
+    if (!account) account = await userModel.findOne({ email });
+    if (!account) return res.status(404).json({ success: false, message: "Account not found" });
+
+    if (account.otpCode !== otp) {
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
+    }
+
+    if (Date.now() > account.otpExpires) {
+      return res.status(400).json({ success: false, message: "OTP expired" });
+    }
+
+    account.otpCode = null;
+    account.otpExpires = null;
+    await account.save();
+
+    res.status(200).json({ success: true, message: "OTP verified" });
+  } catch (error) {
+    console.error("Verify OTP error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 
 // 🔹 POST /api/v1/auth/forgot/reset
 exports.resetPassword = async (req, res) => {
@@ -376,3 +440,7 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
+
+

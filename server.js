@@ -146,6 +146,22 @@ app.use('/api/v1/',tournanmentRoutes);
 app.use('/api/v1/',transactionRoutes);
 app.use('',userPassport);
 app.use('',hostPassport);
+
+
+// server.js (or app.js)
+const autoStartTournaments = require('./utils/autoStartTournaments');
+const checkMatchAttendance = require('./utils/checkAttendance');
+
+setInterval(() => {
+  autoStartTournaments().catch(console.error);
+}, 60 * 1000); // every minute
+
+setInterval(() => {
+  checkMatchAttendance().catch(console.error);
+}, 60 * 1000); // every minute
+
+// PRODUCTION NOTE: use a cron worker or job queue (Bull + Redis) to guarantee single runner when you have multiple instances.
+
 app.use((error, req, res, next) => {
   if(error){
      return res.status(400).json({message:  error.message})

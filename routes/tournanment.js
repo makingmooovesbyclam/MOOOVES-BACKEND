@@ -9,53 +9,301 @@ const authMiddleware  = require('../middlewares/authMiddleware')
  * @swagger
  * /api/v1/tournaments:
  *   post:
- *     summary: Create a new tournament and generate an invite link
- *     description: >
- *       Creates a tournament (by host or user) and returns the tournament data plus a unique invite link.  
- *       Use this link to allow others to join.  
- *     tags: [Tournaments]
+ *     summary: Create a new tournament and generate a unique invite link
+ *     description: |
+ *       This endpoint allows a User or Host to create a new tournament.  
+ *       
+ *       ### 🧩 Logic Flow:
+ *       - The organizer can be either a User or a Host.  
+ *       - A User must have joined at least 2 tournaments before being allowed to host their own (unless already granted host rights).  
+ *       - The system automatically validates maxPlayers, entryFee, and startTime.  
+ *       - The maximum number of players allowed is 50.  
+ *       - The startTime must be a valid future UTC date (ISO format).  
+ *       - On success, the response includes a generated invite link (using a 4-byte random hex code).  
+ *       - An optional email notification is sent to the organizer, confirming the tournament schedule.  
+ *       
+ *       Note:  
+ *       - Default maxParticipants is 16 if not provided.  
+ *       - Default entryFee is 0 if not provided.  
+ *       - Automatically sets status to "scheduled".  
+ *       - Auto-start is enabled by default (`autoStartEnabled: true`).
+ *       
+ *       Authorization: Requires Bearer Token (JWT)
+ *     tags:
+ *       - Tournaments
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, createdBy]
+ *             required:
+ *               - organizerId
+ *               - name
+ *               - startTime
  *             properties:
- *               name:
- *                 type: string
- *                 example: "strange"
- *               maxPlayers:
- *                 type: string
- *                 example: "25"
- *               entryfee:
- *                 type: Number
- *                 example: "500"
  *               organizerId:
  *                 type: string
  *                 description: ID of the user or host creating the tournament
- *                 example: "64f2b8d91a32f9c8b1c12345"
+ *                 example: "670f52e81df21e2c4b6a120c"
+ *               name:
+ *                 type: string
+ *                 description: The name of the tournament
+ *                 example: "MOOOVES Pro League"
+ *               maxPlayers:
+ *                 type: integer
+ *                 description: Maximum number of players allowed (must be ≤ 50)
+ *                 example: 32
+ *               entryFee:
+ *                 type: number
+ *                 description: Entry fee per participant
+ *                 example: 500
+ *               startTime:
+ *                 type: string
+ *                 format: date-time
+ *                 description: UTC start time (ISO 8601 format)
+ *                 example: "2025-11-01T15:00:00Z"
  *     responses:
  *       201:
  *         description: Tournament created successfully
  *         content:
  *           application/json:
  *             example:
- *               message: "Tournament created"
+ *               message: "Tournament created successfully"
  *               tournament:
- *                 id: "64f2b8d91a32f9c8b1c67890"
- *                 name: "Summer Championship"
- *                 inviteLink: "http://localhost:5000/api/v1/tournaments/join/abc123"
+ *                 _id: "670f52e81df21e2c4b6a120c"
+ *                 name: "MOOOVES Pro League"
+ *                 createdBy: "670f52d91df21e2c4b6a11ff"
+ *                 createdByModel: "Host"
+ *                 participants: []
+ *                 maxParticipants: 32
+ *                 entryFee: 500
+ *                 prizePool: 0
+ *                 inviteCode: "a1b2c3d4"
+ *                 status: "scheduled"
+ *                 startTime: "2025-11-01T15:00:00.000Z"
+ *                 autoStartEnabled: true
+ *               inviteLink: "https://your-domain.com/api/v1/tournaments/join/a1b2c3d4"
  *       400:
- *         description: Missing required fields or invalid data
+ *         description: Missing or invalid input fields
+ *         content:
+ *           application/json:
+ *             examples:
+ *               missingFields:
+ *                 summary: Missing organizerId or name
+ *                 value:
+ *                   error: "Host and name are required"
+ *               invalidStartTime:
+ *                 summary: Invalid or past start time
+ *                 value:
+ *                   error: "Invalid or past start time"
+ *               maxPlayerExceeded:
+ *                 summary: Too many players specified
+ *                 value:
+ *                   error: "maximum player is 50"
+ *       403:
+ *         description: User not eligible to host
  *         content:
  *           application/json:
  *             example:
- *               error: "Tournament name is required"
+ *               error: "You must join at least 2 tournaments before hosting one"
+ *       404:
+ *         description: Organizer not found
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: "Organizer not found"
  *       500:
- *         description: Server error
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               error: "Unexpected server error"
  */
 router.post('/tournaments',authMiddleware, tournamentController.createTournament);
+
+/**
+ * @swagger
+ * tags:
+ *   - name: Internal Logic
+ *     description: Non-endpoint business logic used internally by API controllers.
+ */
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     StartTournamentLogic:
+ *       type: object
+ *       description: >
+ *         Internal logic function responsible for initializing a tournament.  
+ *         It is not exposed as a direct API endpoint, but called internally by /api/v1/tournaments/{id}/start.  
+ *         Handles participant validation, match pairing, status updates, email notifications, and logging.
+ *       properties:
+ *         input:
+ *           type: object
+ *           properties:
+ *             tournamentDoc:
+ *               type: string
+ *               description: >
+ *                 Either a full Tournament document (with participants populated)  
+ *                 or just a tournament ID (string).  
+ *                 If only ID is provided, it fetches the document internally.
+ *               example: "670f1b6d2c1a5e304bce9f8a"
+ *         process:
+ *           type: object
+ *           description: Steps performed by the logic
+ *           properties:
+ *             1:
+ *               type: string
+ *               example: "Fetch full tournament document if only ID is provided."
+ *             2:
+ *               type: string
+ *               example: "Validate min and max participants."
+ *             3:
+ *               type: string
+ *               example: "Calculate prize pool based on entry fee × participant count."
+ *             4:
+ *               type: string
+ *               example: "Randomly pair participants into matches (Round 1)."
+ *             5:
+ *               type: string
+ *               example: "Create Match documents and link them to Round 1."
+ *             6:
+ *               type: string
+ *               example: "Update tournament status to 'ongoing'."
+ *             7:
+ *               type: string
+ *               example: "Send tournament-start emails to all participants."
+ *             8:
+ *               type: string
+ *               example: "Send confirmation email to tournament creator (Host/User)."
+ *             9:
+ *               type: string
+ *               example: "Log every email in EmailLog collection."
+ *         output:
+ *           type: object
+ *           properties:
+ *             matchIds:
+ *               type: array
+ *               items:
+ *                 type: string
+ *               example: ["6710cbd512c1a5e304bce9a1", "6710cbd512c1a5e304bce9a2"]
+ *             prizePool:
+ *               type: number
+ *               example: 2500
+ *       example:
+ *         input:
+ *           tournamentDoc: "670f1b6d2c1a5e304bce9f8a"
+ *         process:
+ *           1: "Fetch tournament by ID"
+ *           2: "Validate participants"
+ *           3: "Pair players"
+ *           4: "Create matches"
+ *           5: "Send emails"
+ *         output:
+ *           matchIds: ["6710cbd512c1a5e304bce9a1", "6710cbd512c1a5e304bce9a2"]
+ *           prizePool: 2500
+ */
+
+
+/**
+ * @swagger
+ * /api/v1/tournaments/{id}/reschedule:
+ *   patch:
+ *     summary: Reschedule a tournament (creator only)
+ *     description: >
+ *       Allows the tournament creator to change the start time of a scheduled tournament.  
+ *       Only tournaments with a status of scheduled can be rescheduled.  
+ *       The new start time must be a valid future date.  
+ *       
+ *       After successful update, all participants can optionally be notified via email or WhatsApp (if implemented).
+ *     tags:
+ *       - Tournaments
+ *     security:
+ *       - bearerAuth: []     # Requires JWT authentication via authMiddleware
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The unique ID of the tournament to reschedule.
+ *         example: "6710a5e3b1d6c8f8a93b52a1"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - newStartTime
+ *             properties:
+ *               newStartTime:
+ *                 type: string
+ *                 format: date-time
+ *                 description: The new start date and time for the tournament. Must be in the future.
+ *                 example: "2025-11-10T14:30:00Z"
+ *     responses:
+ *       200:
+ *         description: Tournament rescheduled successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Tournament rescheduled"
+ *                 startTime:
+ *                   type: string
+ *                   format: date-time
+ *                   example: "2025-11-10T14:30:00.000Z"
+ *       400:
+ *         description: Invalid new start time or tournament status.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Invalid new start time"
+ *       403:
+ *         description: Only the tournament creator can perform this action.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Only creator can reschedule"
+ *       404:
+ *         description: Tournament not found.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Tournament not found"
+ *       500:
+ *         description: Internal server error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Unexpected error occurred"
+ */
+router.patch('/:id/reschedule', authMiddleware, tournamentController.rescheduleTournament); // reschedule (creator
+
 
 // ✅ Join tournament using invite link
 /**
@@ -150,35 +398,78 @@ router.get('/tournaments/:tournamentId/invite', tournamentController.getInviteLi
  * @swagger
  * /api/v1/tournaments/{id}/start:
  *   post:
- *     summary: Start a tournament
- *     description: >
- *       Marks the tournament as started.  
- *       Can only be started once players have joined.  
+ *     summary: Manually start a tournament
+ *     description: |
+ *       Starts a tournament when the creator decides to begin it.  
+ *       This endpoint checks that:
+ *       - The tournament exists  
+ *       - The authenticated user is the creator  
+ *       - The tournament status is "scheduled" or "pending"  
+ *       - The minimum number of participants has joined  
+ *       
+ *       Once validated:
+ *       - Players are randomly paired into matches for Round 1.  
+ *       - Tournament status changes to "ongoing".  
+ *       - All participants receive email notifications that the tournament has started.  
+ *       - The creator (host/user) also receives a start confirmation email.  
+ *       - Every sent email is logged in the EmailLog collection.  
+ *       
+ *       > ⚙️ You can also use ?force=true to override the minimum player requirement (for testing or host override).
  *     tags: [Tournaments]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
+ *         description: The unique tournament ID to start.
  *         schema:
  *           type: string
- *         example: 64f2b8d91a32f9c8b1c67890
+ *         example: "670f1b6d2c1a5e304bce9f8a"
+ *       - in: query
+ *         name: force
+ *         required: false
+ *         description: Allows the creator to bypass minimum participant checks (use with caution).
+ *         schema:
+ *           type: boolean
+ *           example: true
  *     responses:
  *       200:
- *         description: Tournament started successfully
+ *         description: Tournament started successfully.
  *         content:
  *           application/json:
  *             example:
- *               message: "Tournament started"
+ *               message: "Tournament started successfully"
+ *               tournamentId: "670f1b6d2c1a5e304bce9f8a"
  *       400:
- *         description: Invalid request (already started, no players, etc.)
+ *         description: Invalid tournament state or permission error.
+ *         content:
+ *           application/json:
+ *             examples:
+ *               NotCreator:
+ *                 summary: Unauthorized user
+ *                 value:
+ *                   message: "Only the creator can start this tournament"
+ *               AlreadyStarted:
+ *                 summary: Tournament already active
+ *                 value:
+ *                   message: "Tournament already started or completed"
+ *               NotEnoughPlayers:
+ *                 summary: Minimum player requirement not met
+ *                 value:
+ *                   message: "At least 4 participants required to start."
+ *       404:
+ *         description: Tournament not found.
  *         content:
  *           application/json:
  *             example:
- *               error: "Tournament already started"
- *       404:
- *         description: Tournament not found
+ *               message: "Tournament not found"
  *       500:
- *         description: Server error
+ *         description: Internal server error.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Unexpected error occurred while starting tournament"
  */
 router.post('/tournaments/:id/start', authMiddleware,tournamentController.startTournament);
 

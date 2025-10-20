@@ -19,6 +19,8 @@ const userSchema =  new mongoose.Schema({
         type: String,
         required: false,
     },
+    otpCode: { type: String },
+otpExpires: { type: Date },
     // For payouts
   bankAccount: {
     accountName: String,

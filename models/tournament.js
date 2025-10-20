@@ -40,9 +40,10 @@ createdByModel: {
     type: Number,
     default: 1
   },
+  // STATUS: keep original values but allow 'scheduled' so existing code doesn't break.
   status: {
     type: String,
-    enum: ['pending', 'ongoing', 'completed'],
+    enum: ['pending', 'scheduled', 'ongoing', 'completed', 'cancelled'],
     default: 'pending'
   },
   rounds: [{
@@ -63,9 +64,13 @@ createdByModel: {
     type: Number,
     default: 50
   },
+
+  // ---- ADDED FIELDS for scheduling ----
+  startTime: { type: Date, required: false },            // UTC timestamp when tournament should start
+  autoStartEnabled: { type: Boolean, default: true },    // if true auto-start runs when time reaches
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now 
   }
 });
 
