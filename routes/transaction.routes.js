@@ -506,6 +506,189 @@ router.post(
  */
 router.post("/send", transaction.sendPayout);
 
+
+/**
+ * @swagger
+ * tags:
+ *   name: Banks
+ *   description: Manage host and player bank details
+ */
+
+/**
+ * @swagger
+ * /api/banks/add:
+ *   post:
+ *     summary: Add bank details for a host or player
+ *     description: >
+ *       This endpoint allows a user (host or player) to add their bank account details for withdrawals or payments.
+ *       The system will verify and store the bank details securely.
+ *     tags: [Banks]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - role
+ *               - bankName
+ *               - accountNumber
+ *               - accountName
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: The unique ID of the user (host/player).
+ *                 example: "652a9fd2c3b0f8429b8a1190"
+ *               role:
+ *                 type: string
+ *                 enum: [host, player]
+ *                 description: Role of the user.
+ *                 example: "host"
+ *               bankName:
+ *                 type: string
+ *                 description: Name of the bank.
+ *                 example: "Access Bank"
+ *               accountNumber:
+ *                 type: string
+ *                 description: The user's 10-digit account number.
+ *                 example: "0123456789"
+ *               accountName:
+ *                 type: string
+ *                 description: Name on the bank account.
+ *                 example: "John Doe"
+ *     responses:
+ *       201:
+ *         description: Bank details added successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               message: "Bank details added successfully"
+ *               data:
+ *                 _id: "652a9fd2c3b0f8429b8a1190"
+ *                 userId: "652a9fd2c3b0f8429b8a1190"
+ *                 role: "host"
+ *                 bankName: "Access Bank"
+ *                 accountNumber: "0123456789"
+ *                 accountName: "John Doe"
+ *                 createdAt: "2025-10-20T15:03:12.291Z"
+ *       400:
+ *         description: Missing or invalid input fields.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "All fields are required"
+ *       500:
+ *         description: Internal server error.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Failed to add bank details"
+ */
+
+/**
+ * @swagger
+ * /api/v1/all:
+ *   get:
+ *     summary: Retrieve all added bank details
+ *     description: Returns a list of all bank records stored for both hosts and players.
+ *     tags: [Banks]
+ *     responses:
+ *       200:
+ *         description: List of all saved bank records.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               data:
+ *                 - _id: "652a9fd2c3b0f8429b8a1190"
+ *                   userId: "652a9fd2c3b0f8429b8a1190"
+ *                   role: "host"
+ *                   bankName: "GTBank"
+ *                   accountNumber: "0123456789"
+ *                   accountName: "John Doe"
+ *                 - _id: "652a9fd2c3b0f8429b8a1191"
+ *                   userId: "652a9fd2c3b0f8429b8a1191"
+ *                   role: "player"
+ *                   bankName: "Access Bank"
+ *                   accountNumber: "0987654321"
+ *                   accountName: "Jane Doe"
+ *       404:
+ *         description: No bank records found.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "No bank details found"
+ *       500:
+ *         description: Internal server error.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Failed to fetch bank details"
+ */
+
+/**
+ * @swagger
+ * /api/v1/{role}/{id}:
+ *   get:
+ *     summary: Get a specific user's bank details
+ *     description: Fetch the bank details of a specific host or player by their user ID.
+ *     tags: [Banks]
+ *     parameters:
+ *       - in: path
+ *         name: role
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [host, player]
+ *         description: The role of the user.
+ *         example: "host"
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The unique ID of the user.
+ *         example: "652a9fd2c3b0f8429b8a1190"
+ *     responses:
+ *       200:
+ *         description: Bank details retrieved successfully.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               data:
+ *                 _id: "652a9fd2c3b0f8429b8a1190"
+ *                 userId: "652a9fd2c3b0f8429b8a1190"
+ *                 role: "host"
+ *                 bankName: "GTBank"
+ *                 accountNumber: "0123456789"
+ *                 accountName: "John Doe"
+ *       404:
+ *         description: Bank details not found for the specified user.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Bank details not found"
+ *       500:
+ *         description: Internal server error.
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               message: "Failed to retrieve bank details"
+ */
+
+
+router.get("/all", transaction.getAllBanks);
+router.get("/:role/:id", transaction.getBankById); // e.g. /bank/host/652a9f...
+
 /**
  * @swagger
  * /api/v1/webhook:

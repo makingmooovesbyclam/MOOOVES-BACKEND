@@ -6,6 +6,79 @@ const axios = require('axios');
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY;
 const MOOOVES_WALLET_ID = process.env.MOOOVES_WALLET_ID; // platform’s wallet
 
+
+
+
+// ✅ Get all banks (users + hosts combined)
+exports.getAllBanks = async (req, res) => {
+  try {
+    const usersWithBanks = await User.find(
+      { "bankAccount.accountNumber": { $exists: true, $ne: null } },
+      { fullName: 1, email: 1, bankAccount: 1 }
+    ).lean();
+
+    const hostsWithBanks = await Host.find(
+      { "bankAccount.accountNumber": { $exists: true, $ne: null } },
+      { fullName: 1, email: 1, bankAccount: 1 }
+    ).lean();
+
+    // Add role info for clarity in the combined list
+    const formattedUsers = usersWithBanks.map(u => ({
+      ...u,
+      role: "user",
+    }));
+
+    const formattedHosts = hostsWithBanks.map(h => ({
+      ...h,
+      role: "host",
+    }));
+
+    const allBanks = [...formattedUsers, ...formattedHosts];
+
+    res.status(200).json({
+      success: true,
+      count: allBanks.length,
+      data: allBanks,
+    });
+  } catch (error) {
+    console.error("Error fetching banks:", error.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ✅ Get one bank by userId or hostId
+exports.getBankById = async (req, res) => {
+  try {
+    const { id, role } = req.params;
+
+    if (!id || !role) {
+      return res.status(400).json({ message: "Missing id or role" });
+    }
+
+    let account;
+
+    if (role === "host") {
+      account = await Host.findById(id, { fullName: 1, email: 1, bankAccount: 1 });
+    } else if (role === "user") {
+      account = await User.findById(id, { fullName: 1, email: 1, bankAccount: 1 });
+    } else {
+      return res.status(400).json({ message: "Invalid role" });
+    }
+
+    if (!account) {
+      return res.status(404).json({ message: "Account not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: account,
+    });
+  } catch (error) {
+    console.error("Error fetching bank:", error.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 // ------------------ INITIAL PAYMENT ------------------
 exports.initialPayment = async (req, res) => {
   try {
