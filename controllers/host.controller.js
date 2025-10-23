@@ -6,39 +6,43 @@ const userModel = require('../models/user.js');
 const signup = require('../helper/signup')
 exports.createHost = async (req, res) => {
   try {
-    const { fullName, email, password,repeatPassword } = req.body;
+    const { fullName, email, password, repeatPassword } = req.body;
 
     // Validate input
     if (!fullName || !email || !password || !repeatPassword) {
-      return res.status(400).json({ error: 'Please provide fullName, email, password, and repeatPassword' });
+      return res.status(400).json({
+        error: "Please provide fullName, email, password, and repeatPassword",
+      });
     }
 
     // Check if passwords match
-            if (password !== repeatPassword) {
-                return res.status(400).json({
-                    message: "Passwords do not match"
-                });
-            }
-    
-const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
-        if (userExists) {
-            return res.status(400).json({
-                message:` Email: ${email} already in use as User Please kindly make a change of Email`
-            });
-        }
-    // Check if host with email already exists
+    if (password !== repeatPassword) {
+      return res.status(400).json({ message: "Passwords do not match" });
+    }
+
+    // Check for existing email in user or host collections
+    const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
+    if (userExists) {
+      return res.status(400).json({
+        message:` Email: ${email} already in use as User. Please kindly make a change of Email.`,
+      });
+    }
+
     const existing = await Host.findOne({ email: email.toLowerCase().trim() });
     if (existing) {
       return res.status(400).json({
-        message: `Email: ${email} is already in use`
+        message: `Email: ${email} is already in use.`,
       });
     }
-    const usernameExists = await Host.findOne({fullName : fullName.toLowerCase().trim() });
-            if (usernameExists) {
-                return res.status(400).json({
-                    message:` Name: ${fullName} already in use`
-                });
-            }
+
+    const usernameExists = await Host.findOne({
+      fullName: fullName.toLowerCase().trim(),
+    });
+    if (usernameExists) {
+      return res.status(400).json({
+        message:` Name: ${fullName} already in use.`,
+      });
+    }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -47,39 +51,39 @@ const userExists = await userModel.findOne({ email: email.toLowerCase().trim() }
     const host = new Host({
       fullName: fullName.trim(),
       email: email.toLowerCase().trim(),
-      password: hashedPassword
+      password: hashedPassword,
     });
 
-    // Save host to DB
     await host.save();
 
-    // // Generate verification token
-     const token = jwt.sign({ hostId: host._id }, process.env.SECRET, { expiresIn: '10m' });
-
-    // // Construct verification link
-    // const link = `${req.protocol}://${req.get('host')}/verify-user/${token}`;
-     const firstName = fullName.trim().split(' ')[0];
-
-    //  Setup email details
-    const mailDetails = {
-      email: host.email,
-      subject: 'Welcome to the MOOOVES Platform!',
-      html: signup( firstName)
-    };
-
-    // Send email
-    await sendEmail(mailDetails);
-  
-    // Send success response
-    res.status(201).json({
-      message: 'Host created successfully.',
-      host,
-     token
+    // Generate verification token
+    const token = jwt.sign({ hostId: host._id }, process.env.SECRET, {
+      expiresIn: "10m",
     });
 
+    // Prepare email
+    const firstName = fullName.trim().split(" ")[0];
+    const subject = "Welcome to the MOOOVES Platform!";
+    const message = signup(firstName);
+
+    // Send email safely (won’t block success if email fails)
+    try {
+      await sendEmail(host.email, subject, message);
+    } catch (emailError) {
+      console.error("Email sending failed:", emailError.message);
+    }
+
+    // ✅ Success response
+    return res.status(201).json({
+      message: "Host created successfully.",
+      host,
+      token,
+    });
   } catch (err) {
-    console.error('[createHost error]', err);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
+    console.error("[createHost error]", err);
+    return res
+      .status(500)
+      .json({ error: "Internal server error", details: err.message });
   }
 };
 
