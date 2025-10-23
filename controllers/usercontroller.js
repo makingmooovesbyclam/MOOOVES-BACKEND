@@ -9,41 +9,54 @@ exports.registeruser = async (req, res) => {
   try {
     const { fullName, email, password, repeatPassword } = req.body;
 
-    if (!fullName || !email || !password || !repeatPassword) {
+    // Validate input
+    if (!fullName  ||!email  ||!password || !repeatPassword) {
       return res.status(400).json({
         message: "Please provide fullName, email, password, and repeatPassword",
       });
     }
 
+    // Password match check
     if (password !== repeatPassword) {
       return res.status(400).json({
         message: "Passwords do not match",
       });
     }
 
-    const userExistsInHost = await Host.findOne({ email: email.toLowerCase().trim() });
+    // Check if email already exists in Host collection
+    const userExistsInHost = await Host.findOne({
+      email: email.toLowerCase().trim(),
+    });
     if (userExistsInHost) {
       return res.status(400).json({
         message: `Email: ${email} already in use as Host. Please use a different email.`,
       });
     }
 
-    const userExists = await userModel.findOne({ email: email.toLowerCase().trim() });
+    // Check if email already exists in User collection
+    const userExists = await userModel.findOne({
+      email: email.toLowerCase().trim(),
+    });
     if (userExists) {
       return res.status(400).json({
         message: `Email: ${email} already in use.`,
       });
     }
 
-    const nameExists = await userModel.findOne({ fullName: fullName.toLowerCase().trim() });
+    // Check if name already exists
+    const nameExists = await userModel.findOne({
+      fullName: fullName.toLowerCase().trim(),
+    });
     if (nameExists) {
       return res.status(400).json({
-        message:` Name: ${fullName} already in use.`,
+        message: `Name: ${fullName} already in use.`,
       });
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Create user
     const user = new userModel({
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
@@ -52,24 +65,28 @@ exports.registeruser = async (req, res) => {
 
     await user.save();
 
+    // Generate JWT token
+    const token = jwt.sign({ userId: user._id }, process.env.SECRET, {
+      expiresIn: "10m",
+    });
 
-
-     const token = jwt.sign({ hostId: user._id }, process.env.SECRET, { expiresIn: '10m' });
+    // Prepare email
     const firstName = fullName.trim().split(" ")[0];
+    const subject = "Welcome to the MOOOVES Platform!";
+    const message = signup(firstName);
 
-    // ✅ Fixed: use user.email instead of host.email
-    const mailDetails = {
-      email: user.email,
-      subject: "Welcome to the MOOOVES Platform!",
-      html: signup(firstName),
-    };
+    // Send email safely
+    try {
+      await sendEmail(user.email, subject, message);
+    } catch (emailError) {
+      console.error("❌ Email send error:", emailError.message);
+    }
 
-    await sendEmail(mailDetails);
-
+    // Success response
     return res.status(201).json({
       message: "User registered successfully.",
       data: user,
-      token
+      token,
     });
   } catch (error) {
     console.error("❌ Register error:", error.message);
