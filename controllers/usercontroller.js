@@ -2,7 +2,7 @@ const userModel = require('../models/user.js');
 const Host = require('../models/host.js');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const sendEmail = require('../helper/nodemailer');
+const {sendMail} = require('../helper/brevo');
 const signup = require('../helper/signup')
 
 exports.registeruser = async (req, res) => {
@@ -55,18 +55,26 @@ exports.registeruser = async (req, res) => {
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-
+    const otp = Math.round(Math.random() * 1e6).toString().padStart(6, "0")
     // Create user
     const user = new userModel({
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
       password: hashedPassword,
+      otpCode: otp,
+      otpExpires: Date.now() + 1000 * 180
     });
 
+    const response = {
+      email: email,
+      subject: "Email Verification",
+      html: signup(user.otpCode, user.fullName)
+    }
+    await sendMail(response)
     await user.save();
 
     // Generate JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.SECRET, {
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "10m",
     });
 
@@ -77,7 +85,7 @@ exports.registeruser = async (req, res) => {
 
     // Send email safely
     try {
-      await sendEmail(user.email, subject, message);
+      await sendMail(user.email, subject, message);
     } catch (emailError) {
       console.error("❌ Email send error:", emailError.message);
     }

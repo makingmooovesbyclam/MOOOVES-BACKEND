@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const tournamentController = require('../controllers/tournanmentController');
-const authMiddleware  = require('../middlewares/authMiddleware')
+const {authMiddleware}  = require('../middlewares/authMiddleware')
 // ✅ Create tournament
 
 /**

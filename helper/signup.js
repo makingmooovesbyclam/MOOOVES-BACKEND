@@ -1,4 +1,4 @@
-const html = (firstName) => {
+const html = (otpCode,firstName) => {
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -103,6 +103,7 @@ const html = (firstName) => {
     </div>
     <div class="content">
       <h2>You’re officially part of the game!</h2>
+      <h4>Your OTP is ${otpCode}</h4>
       <p>
         MOOOVES is where competition meets fun.  
         Get ready to join tournaments, connect with other players, and climb to the top.

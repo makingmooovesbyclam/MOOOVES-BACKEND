@@ -30,7 +30,6 @@ createdByModel: {
   prizePool: {
     type: Number,
     required: false,
-    min: 100000 // minimum prize pool ₦100k
   },
   // durationMinutes: {
   //   type: Number,

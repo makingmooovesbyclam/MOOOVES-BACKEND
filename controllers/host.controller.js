@@ -57,7 +57,7 @@ exports.createHost = async (req, res) => {
     await host.save();
 
     // Generate verification token
-    const token = jwt.sign({ hostId: host._id }, process.env.SECRET, {
+    const token = jwt.sign({ hostId: host._id }, process.env.JWT_SECRET, {
       expiresIn: "10m",
     });
 

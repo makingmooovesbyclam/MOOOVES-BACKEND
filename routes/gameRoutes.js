@@ -3,7 +3,7 @@ const router = express.Router();
 const { makeMove ,createMatch} = require('../controllers/gameController');
 
 const matchController = require('../controllers/gameController');
-const authMiddleware  = require('../middlewares/authMiddleware')
+const {authMiddleware}  = require('../middlewares/authMiddleware')
 
 
 /**
