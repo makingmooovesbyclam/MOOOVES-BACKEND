@@ -209,7 +209,7 @@ exports.login = async(req, res)=>{
         }
         // Generate a token for the user
         const token = await jwt.sign({userId: user._id, isLoggedIn : true}, 
-            process.env.SECRET, {expiresIn: '1d'});
+            process.env.JWT_SECRET, {expiresIn: '1d'});
 
             user.isLoggedIn = true;
         await user.save();
@@ -391,7 +391,7 @@ exports.forgotPassword = async (req, res) => {
     `;
 
     // Send the email
-    await sendEmail({
+    await sendMail({
       email: account.email,
       subject: "Your MOOOVES OTP Code",
       html,

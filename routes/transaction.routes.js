@@ -212,6 +212,89 @@ router.get('/verify', transaction.verifyPayment);
  */
 router.post('/bank/add', transaction.addBankDetails);
 
+/**
+ * @swagger
+ * /bank/remove:
+ *   post:
+ *     summary: Remove bank details for a user or host
+  *     tags: [Payment]
+ *     security: [] # No authentication required
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - role
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: The ID of the user or host
+ *                 example: "64f6a2e3b8f4c2001d3e5f12"
+ *               role:
+ *                 type: string
+ *                 description: Role of the account owner
+ *                 enum: [host, user]
+ *                 example: "host"
+ *     responses:
+ *       200:
+ *         description: Bank details removed successfully
+ *         content:
+ *           application/json:
+ *             examples:
+ *               hostRemoved:
+ *                 summary: Bank details removed for host
+ *                 value:
+ *                   message: "Bank details removed successfully (host)"
+ *               userAsHostRemoved:
+ *                 summary: Bank details removed for user acting as host
+ *                 value:
+ *                   message: "Bank details removed (user acting as host)"
+ *               userRemoved:
+ *                 summary: Bank details removed for user
+ *                 value:
+ *                   message: "Bank details removed successfully (user)"
+ *       400:
+ *         description: Bad request or invalid role
+ *         content:
+ *           application/json:
+ *             examples:
+ *               missingFields:
+ *                 summary: Missing required fields
+ *                 value:
+ *                   message: "Missing required fields"
+ *               invalidRole:
+ *                 summary: Invalid role provided
+ *                 value:
+ *                   message: "Invalid role"
+ *       404:
+ *         description: User or Host not found
+ *         content:
+ *           application/json:
+ *             examples:
+ *               hostUserNotFound:
+ *                 summary: Host/User not found
+ *                 value:
+ *                   message: "Host/User not found"
+ *               userNotFound:
+ *                 summary: User not found
+ *                 value:
+ *                   message: "User not found"
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             examples:
+ *               serverError:
+ *                 summary: Error removing bank details
+ *                 value:
+ *                   message: "Error removing bank details"
+ *                   error: "Detailed error message here"
+ */
+router.post('/bank/remove', transaction.removeBankDetails);
+
 
 /**
  * @swagger

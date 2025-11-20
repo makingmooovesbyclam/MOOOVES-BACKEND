@@ -18,7 +18,7 @@ const sendMail = async (options)=>{
             }
         )
         console.log("Email sent")
-    } catch {
+    } catch(error){
         console.log("Error sending email." + error.response?error.response.data : error.message)
     }
 }

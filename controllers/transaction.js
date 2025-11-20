@@ -608,7 +608,64 @@ exports.addBankDetails = async (req, res) => {
   }
 };
 
+exports.removeBankDetails = async (req, res) => {
+  try {
+    const { userId, role } = req.body;
 
+    if (!userId || !role) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // HOST LOGIC
+    if (role === "host") {
+      const host = await Host.findById(userId);
+      if (host) {
+        host.bankAccount = null;
+        await host.save();
+
+        return res.status(200).json({
+          message: "Bank details removed successfully (host)",
+        });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Host/User not found" });
+      }
+
+      user.bankAccount = null;
+      await user.save();
+
+      return res.status(200).json({
+        message: "Bank details removed (user acting as host)",
+      });
+    }
+
+    // USER LOGIC
+    if (role === "user") {
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      user.bankAccount = null;
+      await user.save();
+
+      return res.status(200).json({
+        message: "Bank details removed successfully (user)",
+      });
+    }
+
+    return res.status(400).json({ message: "Invalid role" });
+  } catch (error) {
+    console.error("Remove bank error:", error.message);
+
+    return res.status(500).json({
+      message: "Error removing bank details",
+      error: error.message,
+    });
+  }
+};
 // controllers/bankController.js
 
 // ✅ Verify account number + bank code

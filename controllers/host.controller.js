@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const Host = require('../models/host');
 const jwt = require('jsonwebtoken');
-const sendEmail = require('../helper/nodemailer');
+const {sendMail} = require('../helper/brevo');
 const userModel = require('../models/user.js');
 const signup = require('../helper/signup')
 exports.createHost = async (req, res) => {
@@ -46,14 +46,22 @@ exports.createHost = async (req, res) => {
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-
+const otp = Math.round(Math.random() * 1e6).toString().padStart(6, "0")
     // Create new host
     const host = new Host({
       fullName: fullName.trim(),
       email: email.toLowerCase().trim(),
       password: hashedPassword,
+      otpCode: otp,
+      otpExpires: Date.now() + 1000 * 180
     });
 
+    const response = {
+          email: email,
+          subject: "Email Verification",
+          html: signup(host.otpCode, host.fullName)
+        }
+        await sendMail(response)
     await host.save();
 
     // Generate verification token
@@ -68,7 +76,7 @@ exports.createHost = async (req, res) => {
 
     // Send email safely (won’t block success if email fails)
     try {
-      await sendEmail(host.email, subject, message);
+      await sendMail(host.email, subject, message);
     } catch (emailError) {
       console.error("Email sending failed:", emailError.message);
     }
@@ -148,49 +156,54 @@ exports.deleteHost = async (req, res) => {
   }
 };
 
-exports.Hostlogin = async(req, res)=>{
-    try {
-        //Extract the User's password from the request body
-        const {email, password} =req.body
-        if(email == undefined || password == undefined){
-            return res.status(400).json({
-                message: "please enter email and password"
-            });
-        };
-        // check for the user and throw errorr if not found
-        const user = await Host.findOne({email: email.toLowerCase()})
-        if(user == null){
-            return res.status(404).json({
-                message: "Host not found"
-            });
-        }
-        // check the password if it is correct
-        const isPasswordCorrect = await bcrypt.compare(password, user.password);
-        if(isPasswordCorrect === false){
-            return res.status(400).json({
-                message: "Invalid Password"
-            });
-        }
-        // Generate a token for the user
-        const token = await jwt.sign({userId: user._id,isLoggedIn : true }, 
-            process.env.SECRET, {expiresIn: '1d'});
+exports.Hostlogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-              user.isLoggedIn = true;
-        await user.save();
-        //password destructuring
-        const {password: hashedPassword, ...data} = user._doc
-        // send a success response
-        res.status(200).json({
-            message: " Host Login successful",
-            data,
-            token
-        })
-    } catch (error) {
-        console.log(error.message)
-        res.status(500).json({
-            message: 'Internal Server Error'
-        })
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Please enter email and password"
+      });
     }
+
+    const host = await Host.findOne({ email: email.toLowerCase() });
+    if (!host) {
+      return res.status(404).json({
+        message: "Host not found"
+      });
+    }
+
+    const isPasswordCorrect = await bcrypt.compare(password, host.password);
+    if (!isPasswordCorrect) {
+      return res.status(400).json({
+        message: "Invalid Password"
+      });
+    }
+
+    // Correct token payload
+    const token = jwt.sign(
+      { hostId: host._id, isLoggedIn: true },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    host.isLoggedIn = true;
+    await host.save();
+
+    const { password: _, ...data } = host._doc;
+
+    res.status(200).json({
+      message: "Host login successful",
+      data,
+      token
+    });
+
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({
+      message: "Internal Server Error"
+    });
+  }
 };
 
 
