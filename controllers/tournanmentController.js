@@ -16,30 +16,51 @@ const sendEmail = require('../helper/nodemailer');
 
 
 
-// Reschedule endpoint (creator)
+
+
+
 exports.rescheduleTournament = async (req, res) => {
   try {
     const { id } = req.params;
-    const { newStartTime } = req.body;
-    const userId = req.user.id;
+    const { newStartTime, organizerEmail, organizerName } = req.body; // pass organizer email/name in body
 
+    // Fetch tournament
     const tournament = await Tournament.findById(id);
     if (!tournament) return res.status(404).json({ message: 'Tournament not found' });
-    if (String(tournament.createdBy) !== String(userId)) return res.status(403).json({ message: 'Only creator can reschedule' });
-    if (tournament.status !== 'scheduled') return res.status(400).json({ message: 'Only scheduled tournaments can be rescheduled' });
 
+    // Only scheduled tournaments can be rescheduled
+    if (tournament.status !== 'scheduled') {
+      return res.status(400).json({ message: 'Only scheduled tournaments can be rescheduled' });
+    }
+
+    // Validate new start time
     const newDate = new Date(newStartTime);
-    if (isNaN(newDate.getTime()) || newDate < new Date()) return res.status(400).json({ message: 'Invalid new start time' })
-      tournament.startTime = newDate;
+    if (isNaN(newDate.getTime()) || newDate < new Date()) {
+      return res.status(400).json({ message: 'Invalid new start time' });
+    }
+
+    // Update tournament
+    tournament.startTime = newDate;
     await tournament.save();
 
-    // notify participants about reschedule (optional)
-    // for each participant, fetch email and send a brief email/whatsapp
+    // Send email notification
+    if (organizerEmail) {
+      const firstName = organizerName ? organizerName.split(' ')[0] : 'Organizer';
+      await sendEmail({
+        email: organizerEmail,
+        subject: 'Tournament Rescheduled',
+        html: `<p>Hi ${firstName}, your tournament <b>${tournament.name}</b> is rescheduled for <b>${newDate.toUTCString()}</b>.</p>`
+      });
+    }
 
-    return res.status(200).json({ message: 'Tournament rescheduled', startTime: tournament.startTime });
+    return res.status(200).json({
+      message: 'Tournament rescheduled successfully',
+      startTime: tournament.startTime
+    });
+
   } catch (err) {
     console.error('[rescheduleTournament error]', err);
-    return res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 };
 exports.createTournament = async (req, res) => {
@@ -330,16 +351,34 @@ exports.joinTournamentWithLink = async (req, res) => {
 // ✅ Get all tournaments
 exports.getAllTournaments = async (req, res) => {
   try {
-    const tournaments = await Tournament.find()
-      .populate('participants', 'username email') // show basic participant info
-      .populate('createdBy'); // auto uses createdByModel for Host/User
+    // 401 — Unauthorized (if you are using auth)
+    
 
-    res.status(200).json({
+    // Fetch tournaments
+    const tournaments = await Tournament.find().lean();
+
+    // 404 — No tournaments found
+    if (!tournaments || tournaments.length === 0) {
+      return res.status(404).json({
+        message: "No tournaments found",
+      });
+    }
+
+    // 200 — Success
+    return res.status(200).json({
+      message: "Tournaments fetched successfully",
       count: tournaments.length,
-      tournaments
+      data: tournaments,
     });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch tournaments', details: err.message });
+
+  } catch (error) {
+    console.error("Error fetching tournaments:", error);
+
+    // 500 — Server error
+    return res.status(500).json({
+      message: "Failed to fetch tournaments",
+      error: error.message,
+    });
   }
 };
 

@@ -211,7 +211,7 @@ router.post('/tournaments',authMiddleware, tournamentController.createTournament
 
 /**
  * @swagger
- * /api/v1/tournaments/{id}/reschedule:
+ * /api/v1/{id}/reschedule:
  *   patch:
  *     summary: Reschedule a tournament (creator only)
  *     description: >
@@ -302,7 +302,7 @@ router.post('/tournaments',authMiddleware, tournamentController.createTournament
  *                   type: string
  *                   example: "Unexpected error occurred"
  */
-router.patch('/:id/reschedule', authMiddleware, tournamentController.rescheduleTournament); // reschedule (creator
+router.patch('/:id/reschedule',  tournamentController.rescheduleTournament); // reschedule (creator
 
 
 // ✅ Join tournament using invite link

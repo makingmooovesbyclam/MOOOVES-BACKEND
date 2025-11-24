@@ -10,7 +10,8 @@ exports.authMiddleware = async (req, res, next) => {
     if (!auth) {
       return res.status(400).json({ message: "Token not found" });
     }
-
+    console.log("Authorization header:", req.headers.authorization);
+console.log("AUTH middleware triggered");
     // Extract token
     const token = auth.split(" ")[1];
     if (!token) {
@@ -31,6 +32,7 @@ exports.authMiddleware = async (req, res, next) => {
           message: "Authentication failed: Host not found",
         });
       }
+      console.log("decoded token:", decoded);
 
       // Optional: If you stored isLoggedIn inside JWT
       if (decoded.isLoggedIn !== undefined && account.isLoggedIn !== decoded.isLoggedIn) {
