@@ -154,11 +154,11 @@ const checkMatchAttendance = require('./utils/checkAttendance');
 
 setInterval(() => {
   autoStartTournaments().catch(console.error);
-}, 60 * 1000); // every minute
+}, 5 * 60 * 1000); // every minute
 
 setInterval(() => {
   checkMatchAttendance().catch(console.error);
-}, 60 * 1000); // every minute
+}, 5 * 60 * 1000); // every minute
 
 // PRODUCTION NOTE: use a cron worker or job queue (Bull + Redis) to guarantee single runner when you have multiple instances.
 

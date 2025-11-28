@@ -482,28 +482,27 @@ exports.getBanks = async (req, res) => {
 
 exports.findBanks = async (req, res) => {
   try {
-    const { name } = req.query; // optional query param e.g. /banks?name=OPay
+    const { name } = req.body; // optional query param e.g. /banks?name=OPay
 
-    const response = await axios.get(
-      "https://api.flutterwave.com/v3/banks/NG",
-      {
-        headers: { Authorization:`Bearer ${process.env.FLW_SECRET_KEY}` }
-      }
-    );
+    // Fetch all banks from Flutterwave
+    const response = await axios.get("https://api.flutterwave.com/v3/banks/NG", {
+      headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY} `}
+    });
 
+    // Map only the relevant data
     let banks = response.data.data.map(b => ({
       name: b.name,
       code: b.code
     }));
 
-    // 🔍 If user provides a bank name, filter
-    if (name) {
-      const search = name.toLowerCase();
+    // 🔍 Filter if name query is provided
+    if (name && name.trim() !== "") {
+      const search = name.toLowerCase().trim();
       banks = banks.filter(b => b.name.toLowerCase().includes(search));
 
       if (banks.length === 0) {
         return res.status(404).json({
-          message:` No bank found matching "${name}"`
+          message: `No bank found matching "${name}"`
         });
       }
     }

@@ -102,7 +102,7 @@ exports.createTournament = async (req, res) => {
       participants: [],
       maxParticipants: maxPlayers || 16,
       entryFee: entryFee || 0,
-      prizePool: 0,
+      prizePool: entryFee * (maxPlayers || 16),
       inviteCode,
       status: 'scheduled',
       startTime: startDate,
