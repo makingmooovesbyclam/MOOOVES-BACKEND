@@ -12,9 +12,8 @@ const crypto = require('crypto');
 
 
 
-const sendEmail = require('../helper/nodemailer');
 
-
+const {sendMail} = require('../helper/brevo');
 
 
 
@@ -46,7 +45,7 @@ exports.rescheduleTournament = async (req, res) => {
     // Send email notification
     if (organizerEmail) {
       const firstName = organizerName ? organizerName.split(' ')[0] : 'Organizer';
-      await sendEmail({
+      await sendMail({
         email: organizerEmail,
         subject: 'Tournament Rescheduled',
         html: `<p>Hi ${firstName}, your tournament <b>${tournament.name}</b> is rescheduled for <b>${newDate.toUTCString()}</b>.</p>`
@@ -113,7 +112,7 @@ exports.createTournament = async (req, res) => {
 
     // Optional email to creator
     const firstName = (user?.fullName || host?.fullName || '').split(' ')[0] || 'Organizer';
-    await sendEmail({
+    await sendMail({
       email: (user?.email || host?.email),
       subject: 'Tournament Scheduled',
       html: `<p>Hi ${firstName}, your tournament <b>${tournament.name}</b> is scheduled for <b>${startDate.toUTCString()}</b>.</p>`
@@ -144,7 +143,7 @@ const pairPlayers = (players) => {
 // CORE START LOGIC (exported so auto-start and manual start reuse)
 // NOTE: Accepts either tournament document OR tournament id (we expect doc here)
 const EmailLog = require("../models/EmailLog");
-const { sendmail } = require("../utils/emailService");
+// const { sendmail } = require("../utils/emailService");
 
 
 // -------------------- START TOURNAMENT LOGIC --------------------
@@ -210,7 +209,7 @@ exports.startTournamentLogic = async function startTournamentLogic(tournamentDoc
       — The MOOOVES Team
     `;
 
-    const result = await sendmail(player.email, subject, message);
+    const result = await sendMail(player.email, subject, message);
 
     await EmailLog.create({
       userId: player._id,
@@ -237,7 +236,7 @@ exports.startTournamentLogic = async function startTournamentLogic(tournamentDoc
       — The MOOOVES Team
     `;
 
-    const result = await sendEmail(creator.email, subject, message);
+    const result = await sendMail(creator.email, subject, message);
 
     await EmailLog.create({
       [tournament.createdByModel === "Host" ? "hostId" : "userId"]: creator._id,
