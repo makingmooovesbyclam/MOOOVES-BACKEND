@@ -4,46 +4,286 @@ const { checkWinner } = require('../utils/gameUtils');
 
 // ✅ Create Match (works for 1v1 handshake or tournament)
 // ✅ Create Match (strictly 1v1)
+
 exports.createMatch = async (req, res) => {
+  const { roomId } = req.body;
+
   try {
-    const { matchRoomId, player1, player2 } = req.body;
+    const room = await MatchRoom.findById(roomId);
+    if (!room || !room.player1 || !room.player2)
+      return res.status(400).json({ message: 'Both players must join first' });
 
-    // ✅ Ensure exactly 2 players provided
-    if (!matchRoomId || !player1  || !player2) {
-      return res.status(400).json({ message: 'Match requires a room and exactly 2 players' });
-    }
-
-    const matchRoom = await MatchRoom.findById(matchRoomId);
-    if (!matchRoom) {
-      return res.status(404).json({ message: 'Match room not found' });
-    }
-
-    const newMatch = new Match({
-      player1,
-      player2,
-      
-      matchRoomId,
+    const match = new Match({
+      matchRoomId: room._id,
+      player1: room.player1,
+      player2: room.player2,
       status: 'ongoing',
       gameState: {
-        board: Array.from({ length: 30 }, () => Array(30).fill('')), // 30x30 board
+        board: Array.from({ length: 30 }, () => Array(30).fill('')),
         movesMade: 0,
-        currentTurn: player1 // first player starts
+        currentTurn: room.player1
       },
       startedAt: new Date(),
-  endsAt: new Date(Date.now() + 10 * 60 * 1000) // ✅ 10 minutes from start
+      endsAt: new Date(Date.now() + 10 * 60 * 1000)
+    });
+
+    await match.save();
+    res.status(201).json({ message: 'Match created', match });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.requestRematch = async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { userId } = req.body;
+
+    const match = await Match.findById(matchId);
+    if (!match) {
+      return res.status(404).json({ success: false, message: "Match not found" });
+    }
+
+    // Only players can request rematch
+    if (![match.player1.toString(), match.player2.toString()].includes(userId)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
+    }
+
+    // 1️⃣ If rematch already created
+    if (match.rematchId) {
+      return res.status(200).json({
+        success: true,
+        data: { newMatchId: match.rematchId }
+      });
+    }
+
+    // 2️⃣ Create NEW match (same players, fresh board)
+    const newMatch = new Match({
+      player1: match.player1,
+      player2: match.player2,
+      status: 'pending',
+      gameState: {
+        board: Array(3).fill(null).map(() => Array(3).fill("")),
+        movesMade: 0,
+        currentTurn: match.player1
+      },
+      startedAt: new Date(),
+      endsAt: new Date(Date.now() + 10 * 60 * 1000)
     });
 
     await newMatch.save();
 
+    // 3️⃣ Link old match → new match
+    match.rematchId = newMatch._id;
+    await match.save();
+
     return res.status(201).json({
-      message: '1v1 Match created successfully',
-      match: newMatch,
+      success: true,
+      data: { newMatchId: newMatch._id }
     });
-  } catch (error) {
-    console.error('Create match error:', error);
-    return res.status(500).json({ message: 'Internal server error: ' + error.message });
+
+  } catch (err) {
+    console.error("Rematch error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+exports.declineRematch = async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { userId } = req.body;
+
+    const match = await Match.findById(matchId);
+    if (!match) {
+      return res.status(404).json({ success: false, message: "Match not found" });
+    }
+
+    if (![match.player1.toString(), match.player2.toString()].includes(userId)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
+    }
+
+    match.status = 'declined';
+    match.rematchId = null; // optional but clean
+
+    await match.save();
+
+    return res.status(200).json({ success: true });
+
+  } catch (err) {
+    console.error("Decline rematch error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
+exports.submitOfflineResult = async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { winnerId } = req.body;
+
+    // 1️⃣ Find match
+    const match = await Match.findById(matchId);
+    if (!match) {
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    if (match.status === "completed") {
+      return res.status(400).json({ message: "Match already completed" });
+    }
+
+    // 2️⃣ Validate winner is one of the players
+    if (![match.player1?.toString(), match.player2?.toString()].includes(winnerId)) {
+      return res.status(400).json({ message: "Invalid winner: must be one of the players" });
+    }
+
+    // 3️⃣ Mark result
+    match.status = "completed";
+    match.winner = [winnerId];   // ✅ only store winner
+    match.first = winnerId;      // ✅ optional, set "first" for consistency
+    match.second =
+      winnerId === match.player1?.toString()
+        ? match.player2?.toString()
+        : match.player1?.toString();
+    match.third = null;          // ❌ not used in 1v1
+    match.completedAt = new Date();
+
+    await match.save();
+
+    return res.status(200).json({
+      message: "1v1 match result submitted successfully",
+      match,
+    });
+  } catch (error) {
+    console.error("Offline match result error:", error);
+    return res.status(500).json({ message: "Internal server error: " + error.message });
+  }
+};
+
+function check1v1Winner(board, symbol) {
+  const winPatterns = [
+    // Rows
+    [[0,0],[0,1],[0,2]],
+    [[1,0],[1,1],[1,2]],
+    [[2,0],[2,1],[2,2]],
+    // Columns
+    [[0,0],[1,0],[2,0]],
+    [[0,1],[1,1],[2,1]],
+    [[0,2],[1,2],[2,2]],
+    // Diagonals
+    [[0,0],[1,1],[2,2]],
+    [[0,2],[1,1],[2,0]]
+  ];
+
+  return winPatterns.some(pattern =>
+    pattern.every(([r, c]) => board[r][c] === symbol)
+  );
+}
+
+
+// POST /matches/:matchId/move
+exports.make1v1Move = async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { playerId, row, col, symbol } = req.body; // 'X' or 'O'
+
+    const match = await Match.findById(matchId);
+    if (!match || match.status !== 'ongoing') {
+      return res.status(400).json({ error: 'Match not active' });
+    }
+
+    // Player validation
+    if (![match.player1.toString(), match.player2.toString()].includes(playerId)) {
+      return res.status(403).json({ error: 'Player not part of this match' });
+    }
+
+    // Timer check
+    const now = new Date();
+    if (now > match.endsAt) {
+      match.status = 'completed';
+      await match.save();
+      return res.status(400).json({ error: 'Match time expired' });
+    }
+
+    // Turn validation
+    if (match.gameState.currentTurn.toString() !== playerId) {
+      return res.status(400).json({ error: 'Not your turn' });
+    }
+
+    // Move validation
+    if (
+      row < 0 ||
+      col < 0 ||
+      row >= match.gameState.board.length ||
+      col >= match.gameState.board[0].length
+    ) {
+      return res.status(400).json({ error: 'Move out of bounds' });
+    }
+
+    if (match.gameState.board[row][col] !== '') {
+      return res.status(400).json({ error: 'Cell already occupied' });
+    }
+
+    // Apply move
+    match.gameState.board[row][col] = symbol;
+    match.gameState.movesMade += 1;
+
+    // ✅ CHECK WIN
+    const hasWon = check1v1Winner(match.gameState.board, symbol);
+
+    if (hasWon) {
+      match.status = 'completed';
+      match.winner = playerId;
+
+      await match.save();
+      return res.status(200).json({
+        message: 'Game won',
+        result: 'win',
+        winnerId: playerId,
+        symbol,
+        board: match.gameState.board
+      });
+    }
+
+    // ✅ DRAW CHECK
+    const isBoardFull = match.gameState.board.every(r => r.every(c => c !== ''));
+    if (isBoardFull) {
+      match.status = 'completed';
+      match.winner = null;
+
+      await match.save();
+      return res.status(200).json({
+        message: 'Game ended in a draw',
+        result: 'draw',
+        winnerId: null,
+        board: match.gameState.board
+      });
+    }
+
+    // Switch turn
+    match.gameState.currentTurn =
+      match.player1.toString() === playerId
+        ? match.player2
+        : match.player1;
+
+    await match.save();
+
+    res.status(200).json({
+      message: 'Move accepted',
+      result: 'ongoing',
+      winnerId: null,
+      board: match.gameState.board,
+      currentTurn: match.gameState.currentTurn,
+      timeRemaining: Math.max(0, match.endsAt - now)
+    });
+  } catch (err) {
+    console.error('makeMove error:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+};
+
+
+
+
 
 
 // controllers/match.controller.js
@@ -216,48 +456,6 @@ function calculateScore(board, symbol) {
   return score;
 }
 
-exports.submitOfflineResult = async (req, res) => {
-  try {
-    const { matchId } = req.params;
-    const { winnerId } = req.body;
-
-    // 1️⃣ Find match
-    const match = await Match.findById(matchId);
-    if (!match) {
-      return res.status(404).json({ message: "Match not found" });
-    }
-
-    if (match.status === "completed") {
-      return res.status(400).json({ message: "Match already completed" });
-    }
-
-    // 2️⃣ Validate winner is one of the players
-    if (![match.player1?.toString(), match.player2?.toString()].includes(winnerId)) {
-      return res.status(400).json({ message: "Invalid winner: must be one of the players" });
-    }
-
-    // 3️⃣ Mark result
-    match.status = "completed";
-    match.winner = [winnerId];   // ✅ only store winner
-    match.first = winnerId;      // ✅ optional, set "first" for consistency
-    match.second =
-      winnerId === match.player1?.toString()
-        ? match.player2?.toString()
-        : match.player1?.toString();
-    match.third = null;          // ❌ not used in 1v1
-    match.completedAt = new Date();
-
-    await match.save();
-
-    return res.status(200).json({
-      message: "1v1 match result submitted successfully",
-      match,
-    });
-  } catch (error) {
-    console.error("Offline match result error:", error);
-    return res.status(500).json({ message: "Internal server error: " + error.message });
-  }
-};
 
 exports.makeMove = async (req, res) => {
   try {

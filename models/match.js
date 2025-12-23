@@ -20,7 +20,7 @@ const matchSchema = new mongoose.Schema({
   // keep original statuses but extend with waiting/forfeited
   status: {
     type: String,
-    enum: ['pending', 'waiting', 'ongoing', 'completed', 'forfeited'],
+    enum: ['pending', 'waiting', 'ongoing', 'completed', 'cancelled','declined','forfeited'],
     default: 'pending'
   },
 
@@ -34,6 +34,13 @@ const matchSchema = new mongoose.Schema({
       type: [[String]],
       default: Array(30).fill().map(() => Array(30).fill("")) // ✅ 30x30
     },
+    rematchId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Match',
+  default: null
+},
+
+
     moves: [moveSchema],
     movesMade: { type: Number, default: 0 },
     currentTurn: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }

@@ -3,124 +3,165 @@ const router = express.Router();
 const controller = require('../controllers/matchRoom.controller');
 
 
+const {
+  createMatchRoom,
+  joinMatchByCode
+} = require('../controllers/matchRoom.controller');
 
 
 /**
  * @swagger
- * /api/v1/match:
- *   post:
- *     summary: >
- *       Create a match room (Bluetooth/Hotspot pairing flow).  
- *       🔹 Backend does NOT handle the actual Bluetooth/Wi-Fi connection — the app does this using native APIs.  
- *       🔹 Backend only creates a room and generates a bluetoothToken that Player A shares with Player B.
- *     tags: [Match Room]
-   *     security: [] # No authentication required
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 example: "64f9c2e3a12bcd45ef567890"
- *               gameType:
- *                 type: string
- *                 example: "TicTacToe"
- *     responses:
- *       201:
- *         description: Match room created successfully
- *         content:
- *           application/json:
- *             example:
- *               message: "Match room created"
- *               roomId: "650a6d123b7c11f7e09f45c9"
- *               room:
- *                 _id: "650a6d123b7c11f7e09f45c9"
- *                 user: "64f9c2e3a12bcd45ef567890"
- *                 gameType: "chess"
- *                 status: "waiting"
- *               bluetoothToken: "abc123xy"
-  *       404:
- *         description: matchRoom not found
- *         content:
- *           application/json:
- *             example:
- *               message: "matchRoom not found"
- *       500:
- *         description: Internal server error
- *         content:
- *           application/json:
- *             example:
- *               message: "Internal Server Error"
+ * {
+ *   "tags": [
+ *     {
+ *       "name": "Match Rooms",
+ *       "description": "Temporary match rooms used to pair players via invite codes"
+ *     }
+ *   ]
+ * }
  */
-router.post('/match', controller.createMatchRoom);
 
 /**
  * @swagger
- * /api/v1/match/{roomId}:
- *   post:
- *     summary: >
- *       Join a match room (Bluetooth/Hotspot flow).  
- *       🔹 The mobile app must first connect devices via Bluetooth or hotspot.  
- *       🔹 Once Player B is connected locally and has the bluetoothToken, the app calls this API to register Player B in the backend.
- *     tags: [Match Room]
-    *     security: [] # No authentication required
- *     parameters:
- *       - in: path
- *         name: roomId
- *         required: true
- *         schema:
- *           type: string
- *         description: The ID of the match room created by Player A
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 example: "64f9c2e3a12bcd45ef567891"
- *               handshakeToken:
- *                 type: string
- *                 example: "abc123xy"
- *     responses:
- *       200:
- *         description: Player joined successfully
- *         content:
- *           application/json:
- *             example:
- *               message: "Player added successfully"
- *               room:
- *                 _id: "650a6d123b7c11f7e09f45c9"
- *                 player1: "64f9c2e3a12bcd45ef567890"
- *                 player2: "64f9c2e3a12bcd45ef567891"
- *                 gameType: "chess"
- *                 status: "paired"
- *       400:
- *         description: Error if user already joined or room is full
- *         content:
- *           application/json:
- *             example:
- *               error: "Room is already full"
- *       404:
- *         description: Room not found
- *         content:
- *           application/json:
- *             example:
- *               error: "Room not found"
-  *       500:
- *         description: Internal server error
- *         content:
- *           application/json:
- *             example:
- *               message: "Internal Server Error"
+ * {
+ *   "/api/v1/match-rooms": {
+ *     "post": {
+ *       "tags": ["Match Rooms"],
+ *       "summary": "Create a match room",
+ *       "description": "Creates a temporary match room and generates a 6-character invite code that can be shared with another player.",
+ *       "requestBody": {
+ *         "required": true,
+ *         "content": {
+ *           "application/json": {
+ *             "example": {
+ *               "userId": "64fa1111abcd2222ef333333",
+ *               "gameType": "1v1"
+ *             }
+ *           }
+ *         }
+ *       },
+ *       "responses": {
+ *         "201": {
+ *           "description": "Match room created successfully",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "message": "Match room created",
+ *                 "roomId": "64faaaaaabcd9999ef000000",
+ *                 "matchCode": "A9F2D1"
+ *               }
+ *             }
+ *           }
+ *         },
+ *         "400": {
+ *           "description": "Invalid request body",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "error": "userId is required"
+ *               }
+ *             }
+ *           }
+ *         },
+ *         "500": {
+ *           "description": "Server error",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "error": "Internal server error"
+ *               }
+ *             }
+ *           }
+ *         }
+ *       }
+ *     }
+ *   }
+ * }
  */
-router.post('/match/:roomId', controller.joinMatchRoom);
-// router.post('/match/join/:inviteCode', controller.joinByInviteCode); // NEW
+router.post('/match-rooms', createMatchRoom);
+
+
+
+
+/**
+ * @swagger
+ * {
+ *   "/api/v1/match-rooms/join": {
+ *     "post": {
+ *       "tags": ["Match Rooms"],
+ *       "summary": "Join a match room using invite code",
+ *       "description": "Allows a second player to join a match room using a 6-character invite code. Once two players join, the room is paired.",
+ *       "requestBody": {
+ *         "required": true,
+ *         "content": {
+ *           "application/json": {
+ *             "example": {
+ *               "matchCode": "A9F2D1",
+ *               "userId": "64fa4444abcd5555ef666666"
+ *             }
+ *           }
+ *         }
+ *       },
+ *       "responses": {
+ *         "200": {
+ *           "description": "Joined successfully",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "message": "Joined successfully",
+ *                 "room": {
+ *                   "_id": "64faaaaaabcd9999ef000000",
+ *                   "player1": "64fa1111abcd2222ef333333",
+ *                   "player2": "64fa4444abcd5555ef666666",
+ *                   "status": "paired",
+ *                   "inviteCode": "A9F2D1"
+ *                 }
+ *               }
+ *             }
+ *           }
+ *         },
+ *         "404": {
+ *           "description": "Invalid invite code",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "error": "Invalid code"
+ *               }
+ *             }
+ *           }
+ *         },
+ *         "400": {
+ *           "description": "Room already full",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "error": "Room full"
+ *               }
+ *             }
+ *           }
+ *         },
+ *         "500": {
+ *           "description": "Server error",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "error": "Internal server error"
+ *               }
+ *             }
+ *           }
+ *         }
+ *       }
+ *     }
+ *   }
+ * }
+ */
+router.post('/match-rooms/join', joinMatchByCode);
+
+
+
+
+
+
 
 /**
  * @swagger

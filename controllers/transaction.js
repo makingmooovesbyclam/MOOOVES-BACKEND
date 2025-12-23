@@ -85,9 +85,10 @@ exports.initialPayment = async (req, res) => {
     const { email, tournamentId, userId } = req.body;
 
     const tournament = await Tournament.findById(tournamentId);
-    if (!tournament) return res.status(404).json({ message: "Tournament not found" });
+    if (!tournament) {
+      return res.status(404).json({ message: "Tournament not found" });
+    }
 
-    // Prevent max players > 50
     if (tournament.participants.length >= 50) {
       return res.status(400).json({ message: "Tournament is full (max 50 players)" });
     }
@@ -97,44 +98,89 @@ exports.initialPayment = async (req, res) => {
       return res.status(400).json({ message: "Invalid entry fee" });
     }
 
-    // Prevent duplicate payment
-    const existing = await Transaction.findOne({ user: userId, tournament: tournamentId, status: 'success' });
+    const existing = await Transaction.findOne({
+      user: userId,
+      tournament: tournamentId,
+      status: "success"
+    });
+
     if (existing) {
       return res.status(400).json({ message: "You already paid for this tournament" });
     }
 
-    // Init Flutterwave payment
-    const response = await axios.post(
+    const txRef = `tournament_${tournamentId}_${Date.now()}`;
+
+    // 🔥 FLUTTERWAVE INIT (CORRECT PAYLOAD)
+    const flwRes = await axios.post(
       "https://api.flutterwave.com/v3/payments",
       {
-        tx_ref: `tournament_${tournamentId}_${Date.now()}`,
+        tx_ref: txRef,
         amount,
         currency: "NGN",
+        payment_options: "card,banktransfer,ussd",
         redirect_url: process.env.FRONTEND_REDIRECT_URL,
-        customer: { email },
-        meta: { tournamentId, userId }
+
+        customer: {
+          email
+        },
+
+        meta: {
+          tournamentId,
+          userId
+        },
+
+        customizations: {
+          title: "MOOOVES Tournament",
+          description: "Tournament Entry Fee",
+          logo: "https://moooves.com/logo.png" // optional
+        }
       },
-      { headers: { Authorization: `Bearer ${FLW_SECRET_KEY}` } }
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.FLW_SECRET_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
     );
 
-    // Save transaction
+    // 🔎 DEBUG (VERY IMPORTANT)
+    console.log("FLUTTERWAVE RESPONSE:", JSON.stringify(flwRes.data, null, 2));
+
+    const paymentLink = flwRes.data?.data?.link;
+
+    if (!paymentLink) {
+      return res.status(500).json({
+        message: "Invalid payment response from Flutterwave",
+        flutterwave: flwRes.data
+      });
+    }
+
+    // ✅ SAVE TRANSACTION
     const tx = new Transaction({
       user: userId,
       tournament: tournamentId,
       amount,
       email,
-      reference: response.data.data.tx_ref,
-      status: 'pending'
+      reference: txRef,
+      role: "player",
+      status: "pending"
     });
+
     await tx.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Payment initialized",
-      payment_link: response.data.data.link
+      payment_link: paymentLink,
+      reference: txRef
     });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Error initializing payment" });
+    console.error("Payment init error:", err.response?.data || err.message);
+
+    return res.status(500).json({
+      message: "Error initializing payment",
+      error: err.response?.data || err.message
+    });
   }
 };
 

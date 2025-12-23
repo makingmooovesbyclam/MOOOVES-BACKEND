@@ -1,9 +1,217 @@
 const express = require('express');
 const router = express.Router();
-const { makeMove ,createMatch} = require('../controllers/gameController');
+const { makeMove ,createMatch,
+  make1v1Move,
+  requestRematch,
+  declineRematch} = require('../controllers/gameController');
 
 const matchController = require('../controllers/gameController');
 const {authMiddleware}  = require('../middlewares/authMiddleware')
+
+
+
+
+/**
+ * @swagger
+ * {
+ *   "tags": [
+ *     {
+ *       "name": "1v1 Matches",
+ *       "description": "1-on-1 live match endpoints"
+ *     }
+ *   ]
+ * }
+ */
+
+/**
+ * @swagger
+ * {
+ *   "/api/v1/matches": {
+ *     "post": {
+ *       "tags": ["1v1 Matches"],
+ *       "summary": "Create a new 1v1 match",
+ *       "description": "Creates a new 1v1 match after both players have joined a match room. Initializes the board, turn order, and 10-minute timer.",
+ *       "requestBody": {
+ *         "required": true,
+ *         "content": {
+ *           "application/json": {
+ *             "example": {
+ *               "roomId": "64fa1234abcd5678ef901234"
+ *             }
+ *           }
+ *         }
+ *       },
+ *       "responses": {
+ *         "201": {
+ *           "description": "Match created successfully"
+ *         },
+ *         "400": {
+ *           "description": "Both players must join first"
+ *         }
+ *       }
+ *     }
+ *   }
+ * }
+ */
+router.post('/matches', createMatch);
+
+
+
+/**
+ * @swagger
+ * {
+ *   "/api/v1/matches/{matchId}/move": {
+ *     "post": {
+ *       "tags": ["1v1 Matches"],
+ *       "summary": "Submit a move in a 1v1 match",
+ *       "description": "Validates player turn, board position, timer, and determines win, draw, or ongoing state.",
+ *       "parameters": [
+ *         {
+ *           "name": "matchId",
+ *           "in": "path",
+ *           "required": true,
+ *           "schema": { "type": "string" }
+ *         }
+ *       ],
+ *       "requestBody": {
+ *         "required": true,
+ *         "content": {
+ *           "application/json": {
+ *             "example": {
+ *               "playerId": "64fa1111abcd2222ef333333",
+ *               "row": 1,
+ *               "col": 2,
+ *               "symbol": "X"
+ *             }
+ *           }
+ *         }
+ *       },
+ *       "responses": {
+ *         "200": {
+ *           "description": "Move accepted / game result",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "message": "Game won",
+ *                 "result": "win",
+ *                 "winnerId": "64fa1111abcd2222ef333333",
+ *                 "board": [
+ *                   ["X", "O", "X"],
+ *                   ["O", "X", ""],
+ *                   ["", "", "X"]
+ *                 ]
+ *               }
+ *             }
+ *           }
+ *         },
+ *         "400": {
+ *           "description": "Invalid move or turn"
+ *         }
+ *       }
+ *     }
+ *   }
+ * }
+ */
+router.post('/matches/:matchId/move', make1v1Move);
+
+
+
+/**
+ * @swagger
+ * {
+ *   "/api/v1/matches/{matchId}/rematch": {
+ *     "post": {
+ *       "tags": ["1v1 Matches"],
+ *       "summary": "Request a rematch",
+ *       "description": "Creates a new match using the same players and settings. If a rematch already exists, it returns the existing match ID.",
+ *       "parameters": [
+ *         {
+ *           "name": "matchId",
+ *           "in": "path",
+ *           "required": true,
+ *           "schema": { "type": "string" }
+ *         }
+ *       ],
+ *       "requestBody": {
+ *         "required": true,
+ *         "content": {
+ *           "application/json": {
+ *             "example": {
+ *               "userId": "64fa1111abcd2222ef333333"
+ *             }
+ *           }
+ *         }
+ *       },
+ *       "responses": {
+ *         "201": {
+ *           "description": "Rematch created",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "success": true,
+ *                 "data": {
+ *                   "newMatchId": "64fa9999abcd8888ef777777"
+ *                 }
+ *               }
+ *             }
+ *           }
+ *         },
+ *         "200": {
+ *           "description": "Rematch already exists"
+ *         }
+ *       }
+ *     }
+ *   }
+ * }
+ */
+router.post('/matches/:matchId/rematch', requestRematch);
+
+/**
+ * @swagger
+ * {
+ *   "/api/v1/matches/{matchId}/decline": {
+ *     "post": {
+ *       "tags": ["1v1 Matches"],
+ *       "summary": "Decline a rematch",
+ *       "description": "Allows a player to decline a rematch request. The match is marked as declined.",
+ *       "parameters": [
+ *         {
+ *           "name": "matchId",
+ *           "in": "path",
+ *           "required": true,
+ *           "schema": { "type": "string" }
+ *         }
+ *       ],
+ *       "requestBody": {
+ *         "required": true,
+ *         "content": {
+ *           "application/json": {
+ *             "example": {
+ *               "userId": "64fa1111abcd2222ef333333"
+ *             }
+ *           }
+ *         }
+ *       },
+ *       "responses": {
+ *         "200": {
+ *           "description": "Rematch declined",
+ *           "content": {
+ *             "application/json": {
+ *               "example": {
+ *                 "success": true
+ *               }
+ *             }
+ *           }
+ *         }
+ *       }
+ *     }
+ *   }
+ * }
+ */
+router.post('/matches/:matchId/decline', declineRematch);
+
+
+
 
 
 /**
@@ -287,54 +495,7 @@ router.post('/move', makeMove);
  */
 router.post('/matches/:matchId/join', authMiddleware, matchController.joinMatch);
 
-/**
- * @swagger
- * /api/v1/moves:
- *   post:
- *     summary: Create a new match for offline 1v1
- *     description: >
- *       Initializes a new match object in the database.  
- *       This is usually triggered when pairing players in the first round or subsequent rounds.  
- *       The system assigns player1 and player2, sets the board to default state, and status to in-progress.
- *     tags: [Games]
-  *     security: [] # No authentication required
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               player1:
- *                 type: string
- *               matchroomId:
- *                 type: string
- *               player2:
- *                 type: string
- *             example:
-  *               matchroomId: "650a01c28f9b5678abcd1234"
- *               player1: "64f9c23d8f9b1234abcd5678"
- *               player2: "64f9c23d8f9b1234abcd5679"
- *     responses:
- *       201:
- *         description: Match created successfully
- *         content:
- *           application/json:
- *             example:
- *               matchroomId: "650a01c28f9b5678abcd1234"
- *               player1: "64f9c23d8f9b1234abcd5678"
- *               player2: "64f9c23d8f9b1234abcd5679"
- *               status: "in-progress"
- *       400:
- *         description: Invalid input
-   *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             example:
- *               error: "Failed "
- */
-router.post('/moves', createMatch);
+
 
 /**
  * @swagger
