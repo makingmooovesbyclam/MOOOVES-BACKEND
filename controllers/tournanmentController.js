@@ -145,7 +145,7 @@ const pairPlayers = (players) => {
 const EmailLog = require("../models/EmailLog");
 // const { sendmail } = require("../utils/emailService");
 
-
+const TournamentParticipants = require("../models/waitingRoom");
 // -------------------- START TOURNAMENT LOGIC --------------------
 // -------------------- START TOURNAMENT LOGIC --------------------
 // -------------------- START TOURNAMENT LOGIC --------------------
@@ -157,6 +157,17 @@ exports.startTournamentLogic = async function startTournamentLogic(tournamentDoc
     tournament = await Tournament.findById(tournamentDoc).populate("participants createdBy");
     if (!tournament) throw new Error("Tournament not found");
   }
+
+// const waitingPlayers = await TournamentParticipants.find({
+//     tournamentId: tournament._id,
+//     status: "WAITING"
+//   });
+
+//   if (waitingPlayers.length < tournament.minParticipants) {
+//     throw new Error(
+//      ` At least ${tournament.minParticipants} players required`
+//     );
+//   }
 
   // ✅ Validate participant limits
   const participantCount = tournament.participants.length;
@@ -222,6 +233,10 @@ exports.startTournamentLogic = async function startTournamentLogic(tournamentDoc
       error: result?.error || null,
     });
   }
+
+
+
+  
 
   // ✅ Notify the creator (Host or User)
   const creatorModel = tournament.createdByModel === "Host" ? Host : User;
@@ -298,6 +313,29 @@ exports.startTournament = async (req, res) => {
 
 
 
+const TournamentParticipant = require("../models/waitingRoom");
+
+exports.getWaitingRoom = async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
+
+    const players = await TournamentParticipant.find({
+      tournamentId,
+      status: "WAITING",
+    }).populate("userId", "username email");
+
+    return res.status(200).json({
+      count: players.length,
+      players,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
 // join by link
 exports.joinTournamentWithLink = async (req, res) => {
   try {
@@ -312,26 +350,38 @@ exports.joinTournamentWithLink = async (req, res) => {
       return res.status(400).json({ error: "Joining closed: tournament has already started or the start time has passed" });
     }
 
-    if (tournament.participants.includes(userId)) {
-      return res.status(400).json({ error: "User already joined" });
+    const participant = await TournamentParticipant.findOne({
+      tournamentId: tournament._id,
+      userId
+    });
+
+
+if (participant.status !== "WAITING") {
+      return res.status(400).json({
+        error: "You are already in this tournament"
+      });
     }
+
+    // if (tournament.participants.includes(userId)) {
+    //   return res.status(400).json({ error: "User already joined" });
+    // }
 
     if (tournament.participants.length >= tournament.maxParticipants) {
       return res.status(400).json({ error: "Tournament is full" });
     }
 
-    // payment check: ensure player paid entryFee for this tournament
-    const payment = await Transaction.findOne({
-      user: userId,
-      tournament: tournament._id,
-      role: 'player',
-      status: 'success',
-      amount: tournament.entryFee
-    });
+    // // payment check: ensure player paid entryFee for this tournament
+    // const payment = await Transaction.findOne({
+    //   user: userId,
+    //   tournament: tournament._id,
+    //   role: 'player',
+    //   status: 'success',
+    //   amount: tournament.entryFee
+    // });
 
-    if (!payment) {
-      return res.status(400).json({ error: `User must pay ₦${tournament.entryFee} before joining this tournament `});
-    }
+    // if (!payment) {
+    //   return res.status(400).json({ error: `User must pay ₦${tournament.entryFee} before joining this tournament `});
+    // }
 
     tournament.participants.push(userId);
     await tournament.save();

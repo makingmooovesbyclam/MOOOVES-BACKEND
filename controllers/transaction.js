@@ -183,7 +183,7 @@ exports.initialPayment = async (req, res) => {
     });
   }
 };
-
+const TournamentParticipant = require("../models/waitingRoom");
 // ------------------ VERIFY PAYMENT ------------------
 exports.verifyPayment = async (req, res) => {
   try {
@@ -209,8 +209,17 @@ exports.verifyPayment = async (req, res) => {
     // Add to tournament pool
     const tournament = await Tournament.findById(payment.tournament);
     tournament.prizePool = (tournament.prizePool || 0) + data.amount;
-    tournament.participants.push(payment.user);
-    await tournament.save();
+   // ✅ ADD PLAYER TO WAITING ROOM
+    await TournamentParticipant.findOneAndUpdate(
+      {
+        tournamentId: payment.tournament,
+        userId: payment.user
+      },
+      {
+        status: "WAITING"
+      },
+      { upsert: true }
+    );
 
     res.status(200).json({
       message: "Payment verified & added to pool",

@@ -3,7 +3,73 @@ const express = require('express');
 const router = express.Router();
 const tournamentController = require('../controllers/tournanmentController');
 const {authMiddleware}  = require('../middlewares/authMiddleware')
+
+
+
+
 // ✅ Create tournament
+
+
+/**
+ * GET /api/tournaments/{tournamentId}/waiting-room
+ */
+
+/**
+ * @swagger
+ * /api/tournaments/{tournamentId}/waiting-room:
+ *   get:
+ *     summary: Get tournament waiting room participants
+ *     description: >
+ *       Returns a list of players who are currently in the WAITING state
+ *       for a specific tournament.
+ *     tags:
+ *       - Tournaments
+ *     parameters:
+ *       - in: path
+ *         name: tournamentId
+ *         required: true
+ *         description: The ID of the tournament
+ *         schema:
+ *           type: string
+ *           example: "64f1b2c8a1e9b123456789ab"
+ *     responses:
+ *       200:
+ *         description: Waiting room players retrieved successfully
+ *         content:
+ *           application/json:
+ *             example:
+ *               count: 2
+ *               players:
+ *                 - _id: "65a1c2d3e4f5678901234567"
+ *                   tournamentId: "64f1b2c8a1e9b123456789ab"
+ *                   status: "WAITING"
+ *                   userId:
+ *                     _id: "649abc123def456789000111"
+ *                     username: "playerOne"
+ *                     email: "playerone@email.com"
+ *                 - _id: "65a1c2d3e4f5678901234568"
+ *                   tournamentId: "64f1b2c8a1e9b123456789ab"
+ *                   status: "WAITING"
+ *                   userId:
+ *                     _id: "649abc123def456789000222"
+ *                     username: "playerTwo"
+ *                     email: "playertwo@email.com"
+ *       404:
+ *         description: Tournament not found or no players in waiting room
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "No waiting players found for this tournament"
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Internal server error"
+ */
+router.get('tournaments/{tournamentId}/waiting-room',tournamentController.getWaitingRoom)
+
+
 
 /**
  * @swagger
