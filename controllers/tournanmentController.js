@@ -64,16 +64,35 @@ exports.rescheduleTournament = async (req, res) => {
 };
 exports.createTournament = async (req, res) => {
   try {
-    const { organizerId, name, maxPlayers, entryFee, startTime } = req.body;
+    const {
+      organizerId,
+      name,
+      maxPlayers,
+      entryFee,
+      startTime,
+      tournamentType
+    } = req.body;
 
-    if (!organizerId || !name) return res.status(400).json({ error: "Host and name are required" });
-    if (maxPlayers && maxPlayers > 50) return res.status(400).json({ error: "maximum player is 50" });
-    if (!startTime) return res.status(400).json({ error: "startTime is required (UTC ISO string)" });
+    if (!organizerId || !name || !startTime || !tournamentType) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    if (maxPlayers < 6 || maxPlayers > 50) {
+  return res.status(400).json({
+    error: "Participant limit must be between 6 and 50"
+  });
+}
+
+    if (!["paid", "free"].includes(tournamentType)) {
+      return res.status(400).json({ error: "Invalid tournament type" });
+    }
+
+if (!startTime) return res.status(400).json({ error: "startTime is required (UTC ISO string)" });
 
     const startDate = new Date(startTime);
     if (isNaN(startDate.getTime()) || startDate < new Date()) {
-      return res.status(400).json({ error: "Invalid or past start time" });
+      return res.status(400).json({ error: "Invalid start time" });
     }
+
 
     let user = await User.findById(organizerId);
     let host = null;
@@ -87,33 +106,41 @@ exports.createTournament = async (req, res) => {
       if (user.tournamentsJoinedCount < 2) {
         return res.status(403).json({ error: "You must join at least 2 tournaments before hosting one" });
       }
-      user.canHostTournament = true;
-      await user.save();
     }
 
-    const inviteCode = crypto.randomBytes(4).toString('hex');
-    const creatorModel = user ? 'User' : 'Host';
-
+    const inviteCode = crypto.randomBytes(4).toString("hex");
+const creatorModel = user?'User':'Host';
     const tournament = new Tournament({
       name,
       createdBy: organizerId,
       createdByModel: creatorModel,
       participants: [],
       maxParticipants: maxPlayers || 16,
-      entryFee: entryFee || 0,
-      prizePool: entryFee * (maxPlayers || 16),
+      entryFee: tournamentType === "free" ? 0 : entryFee || 0,
+      prizePool: 0,
       inviteCode,
-      status: 'scheduled',
+      status: tournamentType === "free" ? "pending" : "scheduled",
       startTime: startDate,
-      autoStartEnabled: true
+      tournamentType,
+      hostPaymentStatus: tournamentType === "paid"
     });
 
     await tournament.save();
 
+    // If FREE → initiate Flutterwave
+    if (tournamentType === "free") {
+      return res.status(200).json({
+        message: "Proceed to payment",
+        paymentRequired: true,
+        amount: 10000,
+        tournamentId: tournament._id
+      });
+    }
+
     // Optional email to creator
     const firstName = (user?.fullName || host?.fullName || '').split(' ')[0] || 'Organizer';
     await sendMail({
-      email: (user?.email || host?.email),
+      email: (user.email || host?.email),
       subject: 'Tournament Scheduled',
       html: `<p>Hi ${firstName}, your tournament <b>${tournament.name}</b> is scheduled for <b>${startDate.toUTCString()}</b>.</p>`
     });
@@ -275,7 +302,9 @@ exports.startTournament = async (req, res) => {
     const userId = req.user.id;
 
     const tournament = await Tournament.findById(id).populate("participants");
-
+if (tournament.tournamentType === "free" && !tournament.hostPaymentStatus) {
+  throw new Error("Host has not completed payment");
+}
     if (!tournament) {
       return res.status(404).json({ message: "Tournament not found" });
     }
@@ -369,6 +398,27 @@ if (participant.status !== "WAITING") {
     if (tournament.participants.length >= tournament.maxParticipants) {
       return res.status(400).json({ error: "Tournament is full" });
     }
+
+    if (tournament.tournamentType === "free") {
+
+  if (!tournament.hostPaymentStatus) {
+    return res.status(400).json({
+      error: "Tournament not yet activated by host payment"
+    });
+  }
+
+  if (tournament.participants.length >= tournament.maxParticipants) {
+    return res.status(400).json({ error: "Tournament is full" });
+  }
+
+  tournament.participants.push(userId);
+  await tournament.save();
+
+  return res.json({
+    message: "Joined free tournament successfully",
+    tournamentId: tournament._id
+  });
+}
 
     // // payment check: ensure player paid entryFee for this tournament
     // const payment = await Transaction.findOne({

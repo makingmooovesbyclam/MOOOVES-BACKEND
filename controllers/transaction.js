@@ -89,15 +89,30 @@ exports.initialPayment = async (req, res) => {
       return res.status(404).json({ message: "Tournament not found" });
     }
 
+    if (tournament.tournamentType !== "free") {
+      return res.status(400).json({ error: "Not a free tournament" });
+    }
+
     if (tournament.participants.length >= 50) {
       return res.status(400).json({ message: "Tournament is full (max 50 players)" });
     }
-
+if (tournament.hostPaymentStatus) {
+      return res.status(400).json({ error: "Host already paid" });
+    }
     const amount = tournament.entryFee;
     if (!amount || amount < 500) {
       return res.status(400).json({ message: "Invalid entry fee" });
     }
 
+    // Validate FREE tournament payment requirement
+if (tournament.tournamentType === "free") {
+  const amount = 10000;
+  if (!amount || amount < 10000) {
+    return res.status(400).json({
+      message: "Invalid host sponsorship fee"
+    });
+  }
+}
     const existing = await Transaction.findOne({
       user: userId,
       tournament: tournamentId,

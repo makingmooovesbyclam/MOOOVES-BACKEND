@@ -39,7 +39,7 @@ const matchSchema = new mongoose.Schema({
   ref: 'Match',
   default: null
 },
-
+turnStartedAt: { type: Date, default: Date.now },
 
     moves: [moveSchema],
     movesMade: { type: Number, default: 0 },
@@ -61,6 +61,8 @@ matchSchema.pre('save', function (next) {
   if (!this.endsAt) {
     this.endsAt = new Date(this.startedAt.getTime() + 10 * 60 * 1000); // 10 min
   }
+
+  
   next();
 });
 

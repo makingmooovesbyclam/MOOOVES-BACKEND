@@ -24,7 +24,7 @@ createdByModel: {
   }],
   entryFee: {
     type: Number,
-    required: false,
+    default:0
     // min: 2000 // minimum entry is ₦2000
   },
   prizePool: {
@@ -70,7 +70,24 @@ createdByModel: {
   createdAt: {
     type: Date,
     default: Date.now 
-  }
+  },
+
+  tournamentType: {
+  type: String,
+  enum: ["paid", "free"],
+  default: "paid"
+},
+
+hostPaymentStatus: {
+  type: Boolean,
+  default: false
+},
+
+hostPaymentReference: {
+  type: String,
+  default: null
+}
+
 });
 
 // module.exports = mongoose.model('Tournament', tournamentSchema);

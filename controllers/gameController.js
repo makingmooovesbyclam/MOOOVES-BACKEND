@@ -27,7 +27,8 @@ exports.createMatch = async (req, res) => {
       gameState: {
         board: Array.from({ length: 30 }, () => Array(30).fill('')),
         movesMade: 0,
-        currentTurn: room.player1
+        currentTurn: room.player1,
+        turnStartedAt: new Date() // ✅ ADD
       },
       startedAt: new Date(),
       endsAt: new Date(Date.now() + 10 * 60 * 1000)
@@ -214,6 +215,33 @@ exports.make1v1Move = async (req, res) => {
     if (match.gameState.currentTurn.toString() !== playerId) {
       return res.status(400).json({ error: 'Not your turn' });
     }
+
+    // ✅ TURN TIMEOUT CHECK (3 seconds)
+const TURN_LIMIT = 3000; // 3 seconds
+
+const WOW = new Date();
+const turnStart = new Date(match.gameState.turnStartedAt).getTime();
+
+if (WOW.getTime() - turnStart > TURN_LIMIT) {
+
+  // Current player exceeded time → auto forfeit turn
+  const forfeitedPlayer = match.gameState.currentTurn;
+
+  const winner =
+    String(match.player1) === String(forfeitedPlayer)
+      ? match.player2
+      : match.player1;
+
+  match.status = "completed";
+  match.winner = [winner];
+
+  await match.save();
+
+  return res.status(400).json({
+    message: "Time exceeded. Player forfeited.",
+    winner
+  });
+}
 
     // Move validation
     if (
@@ -483,7 +511,32 @@ exports.makeMove = async (req, res) => {
         winner: match.winner || null 
       });
     }
+// ✅ TURN TIMEOUT CHECK (3 seconds)
+const TURN_LIMIT = 3000; // 3 seconds
 
+const now = new Date();
+const turnStart = new Date(match.gameState.turnStartedAt).getTime();
+
+if (now.getTime() - turnStart > TURN_LIMIT) {
+
+  // Current player exceeded time → auto forfeit turn
+  const forfeitedPlayer = match.gameState.currentTurn;
+
+  const winner =
+    String(match.player1) === String(forfeitedPlayer)
+      ? match.player2
+      : match.player1;
+
+  match.status = "completed";
+  match.winner = [winner];
+
+  await match.save();
+
+  return res.status(400).json({
+    message: "Time exceeded. Player forfeited.",
+    winner
+  });
+}
     const board = match.gameState.board;
     if (board[row][col]) {
       return res.status(400).json({ message: 'Cell already taken' });
