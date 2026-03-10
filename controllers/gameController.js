@@ -316,140 +316,212 @@ function check1v1Winner(board, symbol) {
 // };
 
 exports.make1v1Move = async (req, res) => {
-  try {
-    const { matchId } = req.params;
-    const { playerId, row, col } = req.body;
+try {
 
-    if (!playerId || row === undefined || col === undefined) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
+const { matchId } = req.params;
+const { playerId, row, col } = req.body;
 
-    const match = await Match.findById(matchId);
-    if (!match || match.status !== 'ongoing') {
-      return res.status(400).json({ error: 'Match not active' });
-    }
+if (!playerId || row === undefined || col === undefined) {
+  return res.status(400).json({ error: "Missing required fields" });
+}
 
-    // ✅ Ensure player belongs to match
-    if (
-      ![String(match.player1), String(match.player2)].includes(String(playerId))
-    ) {
-      return res.status(403).json({ error: 'Player not part of this match' });
-    }
+const match = await Match.findById(matchId);
 
-    // ✅ TURN TIMEOUT CHECK (10 seconds)
-    const TURN_LIMIT = 10000; // 10 seconds
-    const now = new Date().getTime();
-    const turnStart = new Date(match.gameState.turnStartedAt).getTime();
+if (!match || match.status !== "ongoing") {
+  return res.status(400).json({ error: "Match not active" });
+}
 
-    if (now - turnStart > TURN_LIMIT) {
+// ensure player belongs to match
+if (![String(match.player1), String(match.player2)].includes(String(playerId))) {
+  return res.status(403).json({ error: "Player not part of this match" });
+}
 
-      const forfeitedPlayer = match.gameState.currentTurn;
+const now = new Date().getTime();
 
-      const winner =
-        String(match.player1) === String(forfeitedPlayer)
-          ? match.player2
-          : match.player1;
+/*
+=================================
+MATCH TIME LIMIT (10 minutes)
+=================================
+*/
 
-      match.status = "completed";
-      match.winner = winner;
+const MATCH_LIMIT = 600000;
 
-      await match.save();
+const matchStart = new Date(match.createdAt).getTime();
 
-      return res.status(400).json({
-        message: "Time exceeded. Player forfeited.",
-        winner
-      });
-    }
+if (now - matchStart > MATCH_LIMIT) {
 
-    // ✅ Turn validation
-    if (String(match.gameState.currentTurn) !== String(playerId)) {
-      return res.status(400).json({ error: 'Not your turn' });
-    }
+  match.status = "completed";
 
-    // ✅ Bounds check
-    if (
-      row < 0 ||
-      col < 0 ||
-      row >= match.gameState.board.length ||
-      col >= match.gameState.board[0].length
-    ) {
-      return res.status(400).json({ error: 'Move out of bounds' });
-    }
+  await match.save();
 
-    // ✅ Cell check
-    if (match.gameState.board[row][col] !== '') {
-      return res.status(400).json({ error: 'Cell already occupied' });
-    }
+  return res.status(200).json({
+    message: "Match time expired",
+    result: "ended",
+    board: match.gameState.board
+  });
 
-    // ✅ Decide symbol automatically
-    const symbol =
-      String(match.player1) === String(playerId) ? "X" : "O";
+}
 
-    // ✅ Apply move
-    match.gameState.board[row][col] = symbol;
-    match.gameState.movesMade += 1;
+/*
+=================================
+TURN TIME LIMIT (8 seconds)
+=================================
+*/
 
-    // ✅ Check winner
-    const hasWon = check1v1Winner(match.gameState.board, symbol);
+const TURN_LIMIT = 8000;
 
-    if (hasWon) {
-      match.status = 'completed';
-      match.winner = playerId;
+const turnStart = new Date(match.gameState.turnStartedAt).getTime();
 
-      await match.save();
+if (now - turnStart > TURN_LIMIT) {
 
-      return res.status(200).json({
-        message: 'Game won',
-        result: 'win',
-        winnerId: playerId,
-        board: match.gameState.board
-      });
-    }
+  const nextPlayer =
+    String(match.player1) === String(match.gameState.currentTurn)
+      ? match.player2
+      : match.player1;
 
-    // ✅ Draw check
-    const isBoardFull = match.gameState.board.every(r =>
-      r.every(c => c !== '')
-    );
+  match.gameState.currentTurn = nextPlayer;
 
-    if (isBoardFull) {
-      match.status = 'completed';
-      match.winner = null;
+  match.gameState.turnStartedAt = new Date();
 
-      await match.save();
+  await match.save();
 
-      return res.status(200).json({
-        message: 'Game ended in a draw',
-        result: 'draw',
-        winnerId: null,
-        board: match.gameState.board
-      });
-    }
+  return res.status(200).json({
+    message: "Turn forfeited due to timeout",
+    currentTurn: nextPlayer
+  });
+}
 
-    // ✅ Switch turn
-    match.gameState.currentTurn =
-      String(match.player1) === String(playerId)
-        ? match.player2
-        : match.player1;
+/*
+=================================
+TURN VALIDATION
+=================================
+*/
 
-    // 🔥 VERY IMPORTANT → reset timer
-    match.gameState.turnStartedAt = new Date();
+if (String(match.gameState.currentTurn) !== String(playerId)) {
+  return res.status(400).json({ error: "Not your turn" });
+}
 
-    await match.save();
+/*
+=================================
+BOUNDS CHECK
+=================================
+*/
 
-    return res.status(200).json({
-      message: 'Move accepted',
-      result: 'ongoing',
-      winnerId: null,
-      board: match.gameState.board,
-      currentTurn: match.gameState.currentTurn
-    });
+if (
+  row < 0 ||
+  col < 0 ||
+  row >= match.gameState.board.length ||
+  col >= match.gameState.board[0].length
+) {
+  return res.status(400).json({ error: "Move out of bounds" });
+}
 
-  } catch (err) {
-    console.error('make1v1Move error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+/*
+=================================
+CELL CHECK
+=================================
+*/
+
+if (match.gameState.board[row][col] !== "") {
+  return res.status(400).json({ error: "Cell already occupied" });
+}
+
+/*
+=================================
+SYMBOL DECISION
+=================================
+*/
+
+const symbol =
+  String(match.player1) === String(playerId) ? "X" : "O";
+
+/*
+=================================
+APPLY MOVE
+=================================
+*/
+
+match.gameState.board[row][col] = symbol;
+match.gameState.movesMade += 1;
+
+/*
+=================================
+CHECK 5 SYMBOL LINE
+=================================
+*/
+
+const result = checkFiveInRow(match.gameState.board, symbol);
+
+if (result && !match.gameState.lockedRows.includes(result.lineId)) {
+
+  match.gameState.lockedRows.push(result.lineId);
+
+  if (!match.gameState.scores) {
+    match.gameState.scores = {};
   }
-};
 
+  if (!match.gameState.scores[playerId]) {
+    match.gameState.scores[playerId] = 0;
+  }
+
+  match.gameState.scores[playerId] += 1;
+
+}
+
+/*
+=================================
+DRAW CHECK
+=================================
+*/
+
+const isBoardFull = match.gameState.board.every(r =>
+  r.every(c => c !== "")
+);
+
+if (isBoardFull) {
+
+  match.status = "completed";
+
+  await match.save();
+
+  return res.status(200).json({
+    message: "Game ended in draw",
+    result: "draw",
+    board: match.gameState.board
+  });
+
+}
+
+/*
+=================================
+SWITCH TURN
+=================================
+*/
+
+match.gameState.currentTurn =
+  String(match.player1) === String(playerId)
+    ? match.player2
+    : match.player1;
+
+match.gameState.turnStartedAt = new Date();
+
+await match.save();
+
+return res.status(200).json({
+  message: "Move accepted",
+  board: match.gameState.board,
+  currentTurn: match.gameState.currentTurn,
+  scores: match.gameState.scores
+});
+
+} catch (err) {
+
+console.error("make1v1Move error:", err);
+
+res.status(500).json({ error: "Internal server error" });
+
+}
+};
 
 
 // controllers/match.controller.js
